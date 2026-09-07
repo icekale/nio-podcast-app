@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'api.dart';
 import 'catalog.dart';
+import 'covers.dart';
 import 'format.dart';
 import 'player.dart';
 import 'theme.dart';
@@ -80,7 +81,11 @@ class _RadioAppState extends State<RadioApp> {
         _refreshing = false;
         _stale = false;
       });
-      precacheAlbumArt(context, catalog.albums);
+      final sections = groupAlbumsByCategory(catalog.albums, _favoriteIds);
+      unawaited(CoverStore.prefetch([
+        for (final group in sections.groups) ...group.albums,
+        ...sections.rest,
+      ]));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -251,10 +256,7 @@ class _RadioAppState extends State<RadioApp> {
             if (!widget.player.playing) widget.player.toggle();
           },
           onSearch: () => _go(AppScreen.search),
-          onOpenAlbums: () {
-            precacheAlbumArt(context, catalog.albums);
-            _go(AppScreen.albums);
-          },
+          onOpenAlbums: () => _go(AppScreen.albums),
         ),
       AppScreen.albums => AlbumsScreen(
           catalog: catalog,

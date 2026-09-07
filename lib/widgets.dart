@@ -1,10 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'covers.dart';
 import 'format.dart';
 import 'theme.dart';
 
-class Artwork extends StatelessWidget {
+class Artwork extends StatefulWidget {
   const Artwork({super.key, required this.src, this.darkSrc = '', this.width, this.height, this.radius = 8});
 
   final String src;
@@ -14,32 +17,63 @@ class Artwork extends StatelessWidget {
   final double radius;
 
   @override
+  State<Artwork> createState() => _ArtworkState();
+}
+
+class _ArtworkState extends State<Artwork> {
+  String _url = '';
+  File? _file;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(Artwork oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sync();
+  }
+
+  void _sync() {
+    final palette = NioPalette(Theme.of(context).brightness);
+    final url = palette.dark && widget.darkSrc.isNotEmpty ? widget.darkSrc : widget.src;
+    if (url == _url) return;
+    _url = url;
+    _file = CoverStore.lookup(url);
+    if (_file != null || url.isEmpty) return;
+    CoverStore.ensure(url).then((file) {
+      if (!mounted || _url != url) return;
+      setState(() => _file = file);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = NioPalette(Theme.of(context).brightness);
-    final url = palette.dark && darkSrc.isNotEmpty ? darkSrc : src;
+    final size = SizedBox(
+      width: widget.width ?? double.infinity,
+      height: widget.height ?? double.infinity,
+      child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22),
+    );
     return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: BorderRadius.circular(widget.radius),
       child: ColoredBox(
         color: palette.surfaceSoft,
-        child: url.isEmpty
-            ? SizedBox(
-                width: width ?? double.infinity,
-                height: height ?? double.infinity,
-                child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22),
-              )
-            : Image.network(
-                url,
-                width: width ?? double.infinity,
-                height: height ?? double.infinity,
-                cacheWidth: artworkCacheWidth(context, width),
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (_, _, _) => SizedBox(
-                  width: width ?? double.infinity,
-                  height: height ?? double.infinity,
-                  child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22),
-                ),
-              ),
+        child: _url.isEmpty
+            ? size
+            : _file == null
+                ? size
+                : Image.file(
+                    _file!,
+                    width: widget.width ?? double.infinity,
+                    height: widget.height ?? double.infinity,
+                    cacheWidth: artworkCacheWidth(context, widget.width),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, _, _) => size,
+                  ),
       ),
     );
   }
@@ -418,15 +452,4 @@ int artworkCacheWidth(BuildContext context, double? width) {
   final dpr = MediaQuery.devicePixelRatioOf(context);
   final logical = width ?? MediaQuery.sizeOf(context).width / 2;
   return (logical * dpr).round().clamp(64, 720);
-}
-
-void precacheAlbumArt(BuildContext context, List<Album> albums) {
-  final width = artworkCacheWidth(context, null);
-  for (final album in albums.take(8)) {
-    final url = Theme.of(context).brightness == Brightness.dark && album.imageUrlDark.isNotEmpty
-        ? album.imageUrlDark
-        : album.imageUrl;
-    if (url.isEmpty) continue;
-    precacheImage(ResizeImage(NetworkImage(url), width: width), context);
-  }
 }
