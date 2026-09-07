@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,9 +8,12 @@ import 'package:nio_radio/main.dart';
 import 'package:nio_radio/player.dart';
 
 void main() {
-  testWidgets('home list plays into mini player and queue', (tester) async {
+  testWidgets('home matches web copy and plays into mini player', (tester) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final client = MockClient((request) async {
+      if (request.url.toString() == daytimeUrl) {
+        return http.Response(jsonEncode({'result': []}), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+      }
       return http.Response(
         jsonEncode({
           'generatedAt': nowMs,
@@ -20,6 +22,7 @@ void main() {
               'id': 5,
               'name': '资讯充电站',
               'imageUrl': '',
+              'category': 'news',
               'latestEpisode': {
                 'id': 11,
                 'title': '早间新闻',
@@ -36,6 +39,7 @@ void main() {
               'id': 11,
               'name': '乐行记',
               'imageUrl': '',
+              'category': 'audio',
               'latestEpisode': {
                 'id': 12,
                 'title': '路上',
@@ -58,20 +62,26 @@ void main() {
     await tester.pumpWidget(NioRadioApp(api: NioApi(client: client), player: player));
     await tester.pumpAndSettle();
 
+    expect(find.text('NIO Radio'), findsWidgets);
+    expect(find.text('今日推荐'), findsOneWidget);
+    expect(find.text('TODAY'), findsOneWidget);
+    expect(find.text('全部播放'), findsOneWidget);
     expect(find.text('今日更新'), findsOneWidget);
-    expect(find.text('早间新闻'), findsOneWidget);
+    expect(find.text('早间新闻'), findsWidgets);
 
-    await tester.tap(find.text('早间新闻'));
+    await tester.tap(find.text('全部播放'));
     await tester.pumpAndSettle();
     expect(player.current?.id, 11);
     expect(player.playing, isTrue);
-    expect(find.byIcon(Icons.pause_circle), findsOneWidget);
+    expect(find.text('暂停'), findsOneWidget);
+    expect(find.byTooltip('打开播放列表'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.queue_music));
+    await tester.tap(find.byTooltip('全部专辑'));
     await tester.pumpAndSettle();
-    expect(find.byType(ListTile), findsWidgets);
-    await tester.tap(find.text('路上').last);
+    expect(find.text('资讯热点'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('搜索'));
     await tester.pumpAndSettle();
-    expect(player.current?.id, 12);
+    expect(find.text('搜索专辑'), findsOneWidget);
   });
 }

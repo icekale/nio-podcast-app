@@ -1,23 +1,69 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'api.dart';
 
 class RadioPlayer extends ChangeNotifier {
-  RadioPlayer({this.audio, this.skipAudio = false});
+  RadioPlayer({this.audio, this.skipAudio = false}) {
+    if (!skipAudio) {
+      _positionSub = engine.positionStream.listen((value) {
+        final now = DateTime.now();
+        if (now.difference(_lastPositionAt).inMilliseconds < 1000 && value < position + const Duration(seconds: 2)) {
+          position = value;
+          return;
+        }
+        _lastPositionAt = now;
+        position = value;
+        notifyListeners();
+      });
+      _durationSub = engine.durationStream.listen((value) {
+        duration = value ?? Duration.zero;
+        notifyListeners();
+      });
+      _completeSub = engine.processingStateStream.listen((state) {
+        if (state != ProcessingState.completed) return;
+        if (stopAfterEpisode) {
+          stopAfterEpisode = false;
+          playing = false;
+          notifyListeners();
+          unawaited(engine.pause());
+          return;
+        }
+        unawaited(next());
+      });
+    }
+  }
 
   final AudioPlayer? audio;
   final bool skipAudio;
   AudioPlayer? _owned;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<ProcessingState>? _completeSub;
+  DateTime _lastPositionAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   Episode? current;
   List<Episode> queue = const [];
+  List<Episode> history = const [];
   int index = -1;
   bool playing = false;
+  Duration position = Duration.zero;
+  Duration duration = Duration.zero;
+  String? error;
+  bool stopAfterEpisode = false;
 
   AudioPlayer get engine {
     if (audio != null) return audio!;
     return _owned ??= AudioPlayer();
+  }
+
+  bool hasNeighbor(int direction) {
+    for (var cursor = index + direction; cursor >= 0 && cursor < queue.length; cursor += direction) {
+      if (queue[cursor].audioUrl.isNotEmpty) return true;
+    }
+    return false;
   }
 
   Future<void> playQueue(List<Episode> nextQueue, int nextIndex) async {
@@ -25,11 +71,31 @@ class RadioPlayer extends ChangeNotifier {
     queue = List.of(nextQueue);
     index = nextIndex;
     current = queue[index];
-    playing = true;
+    playing = current!.audioUrl.isNotEmpty;
+    position = Duration.zero;
+    duration = Duration.zero;
+    error = playing ? null : '该节目没有可播放音频，请稍后重试';
+    history = [
+      current!,
+      ...history.where((episode) => episode.id != current!.id),
+    ].take(100).toList();
     notifyListeners();
     if (skipAudio || current!.audioUrl.isEmpty) return;
-    await engine.setUrl(current!.audioUrl);
-    await engine.play();
+    try {
+      await engine.setUrl(current!.audioUrl);
+      await engine.play();
+    } catch (reason) {
+      error = '无法播放该节目';
+      playing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> playEpisode(Episode episode, [List<Episode>? visibleQueue]) async {
+    final nextQueue = visibleQueue != null && visibleQueue.isNotEmpty ? visibleQueue : (queue.isEmpty ? [episode] : queue);
+    final found = nextQueue.indexWhere((item) => item.id == episode.id);
+    final withEpisode = found >= 0 ? nextQueue : [...nextQueue, episode];
+    await playQueue(withEpisode, found >= 0 ? found : withEpisode.length - 1);
   }
 
   Future<void> toggle() async {
@@ -45,16 +111,68 @@ class RadioPlayer extends ChangeNotifier {
     if (!skipAudio) await engine.play();
   }
 
+  Future<void> seek(Duration value) async {
+    position = value;
+    notifyListeners();
+    if (!skipAudio) await engine.seek(value);
+  }
+
   Future<void> next() async {
-    if (index + 1 < queue.length) await playQueue(queue, index + 1);
+    await _step(1);
   }
 
   Future<void> previous() async {
-    if (index > 0) await playQueue(queue, index - 1);
+    await _step(-1);
+  }
+
+  Future<void> playNext(Episode episode) async {
+    if (current?.id == episode.id) return;
+    final next = queue.where((item) => item.id != episode.id).toList();
+    final insertAt = (index + 1).clamp(0, next.length);
+    next.insert(insertAt, episode);
+    queue = next;
+    index = next.indexWhere((item) => item.id == current?.id);
+    notifyListeners();
+  }
+
+  Future<void> removeFromQueue(int episodeId) async {
+    final removed = queue.indexWhere((item) => item.id == episodeId);
+    if (removed < 0) return;
+    final next = [...queue]..removeAt(removed);
+    if (next.isEmpty) {
+      queue = const [];
+      index = -1;
+      current = null;
+      playing = false;
+      notifyListeners();
+      if (!skipAudio) await engine.stop();
+      return;
+    }
+    if (removed == index) {
+      await playQueue(next, removed.clamp(0, next.length - 1));
+      return;
+    }
+    queue = next;
+    if (removed < index) index -= 1;
+    notifyListeners();
+  }
+
+  Future<void> _step(int direction) async {
+    var cursor = index + direction;
+    while (cursor >= 0 && cursor < queue.length) {
+      if (queue[cursor].audioUrl.isNotEmpty) {
+        await playQueue(queue, cursor);
+        return;
+      }
+      cursor += direction;
+    }
   }
 
   @override
   void dispose() {
+    unawaited(_positionSub?.cancel());
+    unawaited(_durationSub?.cancel());
+    unawaited(_completeSub?.cancel());
     _owned?.dispose();
     super.dispose();
   }

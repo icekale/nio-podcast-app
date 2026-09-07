@@ -10,6 +10,7 @@ class NioColors {
   static const lightTealDark = Color(0xFF006F6D);
   static const lightInk = Color(0xFF08162E);
   static const lightMuted = Color(0xFF5F6B7B);
+  static const lightMutedStrong = Color(0xFF4B586B);
   static const lightLine = Color(0xFFE8EDF0);
 
   static const darkSurface = Color(0xFF101A27);
@@ -19,49 +20,62 @@ class NioColors {
   static const darkTealDark = Color(0xFF8AF5EB);
   static const darkInk = Color(0xFFF0F6FA);
   static const darkMuted = Color(0xFFB8C4CE);
+  static const darkMutedStrong = Color(0xFFD3DDE5);
   static const darkLine = Color(0xFF2B3949);
 
   static const logoTeal = Color(0xFF00BEBE);
+  static const accentInk = Color(0xFF08162E);
+}
+
+class NioPalette {
+  const NioPalette(this.brightness);
+  final Brightness brightness;
+  bool get dark => brightness == Brightness.dark;
+  Color get surface => dark ? NioColors.darkSurface : NioColors.lightSurface;
+  Color get surfaceSoft => dark ? NioColors.darkSurfaceSoft : NioColors.lightSurfaceSoft;
+  Color get aqua => dark ? NioColors.darkAqua : NioColors.lightAqua;
+  Color get teal => dark ? NioColors.darkTeal : NioColors.lightTeal;
+  Color get tealDark => dark ? NioColors.darkTealDark : NioColors.lightTealDark;
+  Color get ink => dark ? NioColors.darkInk : NioColors.lightInk;
+  Color get muted => dark ? NioColors.darkMuted : NioColors.lightMuted;
+  Color get mutedStrong => dark ? NioColors.darkMutedStrong : NioColors.lightMutedStrong;
+  Color get line => dark ? NioColors.darkLine : NioColors.lightLine;
+  Color get danger => dark ? const Color(0xFFFF9292) : const Color(0xFFB53939);
 }
 
 ThemeData nioTheme(Brightness brightness) {
-  final dark = brightness == Brightness.dark;
-  final surface = dark ? NioColors.darkSurface : NioColors.lightSurface;
-  final aqua = dark ? NioColors.darkAqua : NioColors.lightAqua;
-  final teal = dark ? NioColors.darkTeal : NioColors.lightTeal;
-  final ink = dark ? NioColors.darkInk : NioColors.lightInk;
-  final muted = dark ? NioColors.darkMuted : NioColors.lightMuted;
+  final palette = NioPalette(brightness);
   final overlay = SystemUiOverlayStyle(
-    statusBarColor: aqua,
-    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-    systemNavigationBarColor: surface,
-    systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+    statusBarColor: palette.aqua,
+    statusBarIconBrightness: palette.dark ? Brightness.light : Brightness.dark,
+    systemNavigationBarColor: palette.surface,
+    systemNavigationBarIconBrightness: palette.dark ? Brightness.light : Brightness.dark,
   );
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
-    scaffoldBackgroundColor: surface,
+    scaffoldBackgroundColor: palette.surface,
     colorScheme: ColorScheme(
       brightness: brightness,
-      primary: teal,
-      onPrimary: dark ? NioColors.lightInk : Colors.white,
-      secondary: aqua,
-      onSecondary: ink,
-      surface: surface,
-      onSurface: ink,
-      error: dark ? const Color(0xFFFF9292) : const Color(0xFFB53939),
-      onError: surface,
+      primary: palette.teal,
+      onPrimary: palette.dark ? NioColors.accentInk : Colors.white,
+      secondary: palette.aqua,
+      onSecondary: palette.ink,
+      surface: palette.surface,
+      onSurface: palette.ink,
+      error: palette.danger,
+      onError: palette.surface,
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: aqua,
-      foregroundColor: ink,
+      backgroundColor: palette.aqua,
+      foregroundColor: palette.ink,
       elevation: 0,
       scrolledUnderElevation: 0,
       systemOverlayStyle: overlay,
     ),
     textTheme: TextTheme(
-      bodyMedium: TextStyle(color: ink),
-      bodySmall: TextStyle(color: muted),
+      bodyMedium: TextStyle(color: palette.ink, height: 1.45),
+      bodySmall: TextStyle(color: palette.muted),
     ),
   );
 }

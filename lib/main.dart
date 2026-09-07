@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
-import 'home.dart';
 import 'player.dart';
+import 'screens.dart';
 import 'theme.dart';
 
 void main() {
@@ -21,7 +21,7 @@ class NioRadioApp extends StatelessWidget {
       title: 'NIO Radio',
       theme: nioTheme(Brightness.light),
       darkTheme: nioTheme(Brightness.dark),
-      home: HomePage(api: api, player: player),
+      home: RadioApp(api: api, player: player),
     );
   }
 }

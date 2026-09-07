@@ -22,6 +22,7 @@ class Episode {
     required this.albumId,
     required this.albumName,
     required this.albumPic,
+    this.albumPicDark = '',
     required this.host,
     required this.durationMs,
     required this.onlineTime,
@@ -33,6 +34,7 @@ class Episode {
   final int albumId;
   final String albumName;
   final String albumPic;
+  final String albumPicDark;
   final String host;
   final int durationMs;
   final int onlineTime;
@@ -45,6 +47,7 @@ class Episode {
       albumId: _asInt(json['albumId']),
       albumName: (json['albumName'] as String?) ?? '',
       albumPic: (json['albumPic'] as String?) ?? '',
+      albumPicDark: (json['albumPicDark'] as String?) ?? '',
       host: (json['host'] as String?) ?? '',
       durationMs: _asInt(json['duration']),
       onlineTime: _asInt(json['onlineTime']),
@@ -67,6 +70,7 @@ class Episode {
       albumId: _asInt(json['albumId']),
       albumName: (json['albumName'] as String?) ?? '',
       albumPic: (json['albumPic'] as String?) ?? (json['audioPic'] as String?) ?? '',
+      albumPicDark: (json['albumPicDark'] as String?) ?? '',
       host: hostText,
       durationMs: _asInt(json['duration']),
       onlineTime: _asInt(json['onlineTime'] ?? json['updateTime']),
@@ -86,6 +90,12 @@ class Album {
     required this.id,
     required this.name,
     required this.imageUrl,
+    this.imageUrlDark = '',
+    this.description = '',
+    this.host = '',
+    this.category,
+    this.episodeCount = 0,
+    this.directorySubtitle = '',
     required this.evergreen,
     this.latestEpisode,
   });
@@ -93,6 +103,12 @@ class Album {
   final int id;
   final String name;
   final String imageUrl;
+  final String imageUrlDark;
+  final String description;
+  final String host;
+  final String? category;
+  final int episodeCount;
+  final String directorySubtitle;
   final bool evergreen;
   final Episode? latestEpisode;
 
@@ -102,10 +118,22 @@ class Album {
       id: _asInt(json['id']),
       name: (json['name'] as String?) ?? '',
       imageUrl: (json['imageUrl'] as String?) ?? '',
+      imageUrlDark: (json['imageUrlDark'] as String?) ?? '',
+      description: (json['description'] as String?) ?? '',
+      host: (json['host'] as String?) ?? '',
+      category: json['category'] as String?,
+      episodeCount: _asInt(json['episodeCount'] ?? json['count']),
+      directorySubtitle: (json['directorySubtitle'] as String?) ?? '',
       evergreen: json['evergreen'] == true,
       latestEpisode: latest is Map<String, dynamic> ? Episode.fromCatalog(latest) : null,
     );
   }
+}
+
+class EpisodePage {
+  const EpisodePage({required this.episodes, required this.hasMore});
+  final List<Episode> episodes;
+  final bool hasMore;
 }
 
 class Catalog {
@@ -176,7 +204,11 @@ class NioApi {
     return Catalog.fromJson(jsonDecode(response) as Map<String, dynamic>);
   }
 
-  Future<List<Episode>> fetchAlbumEpisodes(int albumId, {int page = 1, int pageSize = 20}) async {
+  Future<List<Episode>> fetchAlbumEpisodes(int albumId, {int page = 1, int pageSize = 30}) async {
+    return (await fetchAlbumPage(albumId, page: page, pageSize: pageSize)).episodes;
+  }
+
+  Future<EpisodePage> fetchAlbumPage(int albumId, {int page = 1, int pageSize = 30}) async {
     final response = await _client
         .post(
           Uri.parse(albumListUrl),
@@ -198,7 +230,11 @@ class NioApi {
     if (dataList is! List) {
       throw ApiException('INVALID_RESPONSE', '音频服务返回了无法读取的数据');
     }
-    return dataList.whereType<Map>().map((item) => Episode.fromApi(Map<String, dynamic>.from(item))).toList();
+    final haveNext = result['haveNext'];
+    return EpisodePage(
+      episodes: dataList.whereType<Map>().map((item) => Episode.fromApi(Map<String, dynamic>.from(item))).toList(),
+      hasMore: haveNext == 1 || haveNext == true,
+    );
   }
 
   Future<List<Episode>> fetchDaytimeEpisodes() async {
