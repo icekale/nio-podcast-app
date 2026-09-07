@@ -232,9 +232,9 @@ class _RadioAppState extends State<RadioApp> {
   Widget _splash(BuildContext context) {
     final palette = NioPalette(Theme.of(context).brightness);
     return ColoredBox(
-      color: palette.surface,
+      color: palette.dark ? const Color(0xFF101A27) : Colors.white,
       child: Center(
-        child: Image.asset('assets/logo.png', width: 128, height: 128),
+        child: Image.asset('assets/logo.png', width: 168, height: 168),
       ),
     );
   }
@@ -373,7 +373,10 @@ class _SlideRoute extends PageRoute<void> {
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
-    return (settings as _SlidePage).child;
+    return ColoredBox(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: (settings as _SlidePage).child,
+    );
   }
 
   @override
@@ -383,14 +386,11 @@ class _SlideRoute extends PageRoute<void> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return SlideTransition(
-      position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-          .chain(CurveTween(curve: Curves.easeOutCubic))
-          .animate(animation),
+    return ClipRect(
       child: SlideTransition(
-        position: Tween<Offset>(begin: Offset.zero, end: const Offset(-0.2, 0))
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
             .chain(CurveTween(curve: Curves.easeOutCubic))
-            .animate(secondaryAnimation),
+            .animate(animation),
         child: child,
       ),
     );
