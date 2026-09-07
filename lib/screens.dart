@@ -234,7 +234,13 @@ class _RadioAppState extends State<RadioApp> {
     return ColoredBox(
       color: palette.dark ? const Color(0xFF101A27) : Colors.white,
       child: Center(
-        child: Image.asset('assets/logo.png', width: 168, height: 168),
+        child: Image.asset(
+          'assets/logo.png',
+          width: 168,
+          height: 168,
+          color: palette.dark ? Colors.white : Colors.black,
+          colorBlendMode: BlendMode.srcIn,
+        ),
       ),
     );
   }
