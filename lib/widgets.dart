@@ -31,7 +31,9 @@ class Artwork extends StatelessWidget {
                 url,
                 width: width ?? double.infinity,
                 height: height ?? double.infinity,
+                cacheWidth: artworkCacheWidth(context, width),
                 fit: BoxFit.cover,
+                gaplessPlayback: true,
                 errorBuilder: (_, _, _) => SizedBox(
                   width: width ?? double.infinity,
                   height: height ?? double.infinity,
@@ -409,5 +411,22 @@ class SectionHeading extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+int artworkCacheWidth(BuildContext context, double? width) {
+  final dpr = MediaQuery.devicePixelRatioOf(context);
+  final logical = width ?? MediaQuery.sizeOf(context).width / 2;
+  return (logical * dpr).round().clamp(64, 720);
+}
+
+void precacheAlbumArt(BuildContext context, List<Album> albums) {
+  final width = artworkCacheWidth(context, null);
+  for (final album in albums.take(8)) {
+    final url = Theme.of(context).brightness == Brightness.dark && album.imageUrlDark.isNotEmpty
+        ? album.imageUrlDark
+        : album.imageUrl;
+    if (url.isEmpty) continue;
+    precacheImage(ResizeImage(NetworkImage(url), width: width), context);
   }
 }

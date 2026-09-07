@@ -80,6 +80,7 @@ class _RadioAppState extends State<RadioApp> {
         _refreshing = false;
         _stale = false;
       });
+      precacheAlbumArt(context, catalog.albums);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -250,7 +251,10 @@ class _RadioAppState extends State<RadioApp> {
             if (!widget.player.playing) widget.player.toggle();
           },
           onSearch: () => _go(AppScreen.search),
-          onOpenAlbums: () => _go(AppScreen.albums),
+          onOpenAlbums: () {
+            precacheAlbumArt(context, catalog.albums);
+            _go(AppScreen.albums);
+          },
         ),
       AppScreen.albums => AlbumsScreen(
           catalog: catalog,
