@@ -86,6 +86,10 @@ void main() {
     await tester.tap(find.byTooltip('搜索'));
     await tester.pumpAndSettle();
     expect(find.text('搜索专辑'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('今日推荐'), findsOneWidget);
   });
 
   testWidgets('album auto-loads next page without a button', (tester) async {

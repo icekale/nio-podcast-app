@@ -192,7 +192,13 @@ class _RadioAppState extends State<RadioApp> {
   @override
   Widget build(BuildContext context) {
     final palette = NioPalette(Theme.of(context).brightness);
-    return AnnotatedRegion<SystemUiOverlayStyle>(
+    return PopScope(
+      canPop: _screen == AppScreen.home,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _back();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
       value: Theme.of(context).appBarTheme.systemOverlayStyle ?? SystemUiOverlayStyle.dark,
       child: Scaffold(
         backgroundColor: palette.surface,
@@ -213,6 +219,7 @@ class _RadioAppState extends State<RadioApp> {
               ),
           ],
         ),
+      ),
       ),
     );
   }
