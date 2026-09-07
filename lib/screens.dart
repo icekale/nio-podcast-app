@@ -193,9 +193,13 @@ class _RadioAppState extends State<RadioApp> {
   Widget build(BuildContext context) {
     final palette = NioPalette(Theme.of(context).brightness);
     return PopScope(
-      canPop: _screen == AppScreen.home,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        if (_screen == AppScreen.home) {
+          SystemNavigator.pop();
+          return;
+        }
         _back();
       },
       child: AnnotatedRegion<SystemUiOverlayStyle>(

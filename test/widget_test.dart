@@ -80,6 +80,14 @@ void main() {
     await tester.tap(find.byTooltip('全部专辑'));
     await tester.pumpAndSettle();
     expect(find.text('资讯热点'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('今日推荐'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('全部专辑'));
+    await tester.pumpAndSettle();
+    expect(find.text('资讯热点'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border), findsWidgets);
     expect(find.byIcon(Icons.star_border), findsNothing);
 
