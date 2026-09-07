@@ -228,9 +228,19 @@ class _RadioAppState extends State<RadioApp> {
     );
   }
 
+  Widget _splash(BuildContext context) {
+    final palette = NioPalette(Theme.of(context).brightness);
+    return ColoredBox(
+      color: palette.surface,
+      child: Center(
+        child: Image.asset('assets/logo.png', width: 128, height: 128),
+      ),
+    );
+  }
+
   Widget _body() {
     if (_loading) {
-      return const Center(child: Text('正在加载节目…'));
+      return _splash(context);
     }
     if (_catalog == null) {
       return Center(
@@ -245,65 +255,87 @@ class _RadioAppState extends State<RadioApp> {
       );
     }
     final catalog = _catalog!;
-    return switch (_screen) {
-      AppScreen.home => HomeScreen(
-          home: _home!,
-          player: widget.player,
-          stale: _stale,
-          refreshing: _refreshing,
-          error: _error,
-          onRetry: () => _load(force: true),
-          onPlay: (episode) => _play(episode, _home!.episodes),
-          onPlayAll: () {
-            if (_home!.episodes.isEmpty) return;
-            final rec = _home!.episodes.first;
-            if (widget.player.current?.id == rec.id) {
-              widget.player.toggle();
-            } else {
-              _play(rec, _home!.episodes);
-            }
-          },
-          onResume: () {
-            if (!widget.player.playing) widget.player.toggle();
-          },
-          onSearch: () => _go(AppScreen.search),
-          onOpenAlbums: () => _go(AppScreen.albums),
+    return Navigator(
+      pages: [
+        MaterialPage<void>(
+          key: const ValueKey('home'),
+          child: HomeScreen(
+            home: _home!,
+            player: widget.player,
+            stale: _stale,
+            refreshing: _refreshing,
+            error: _error,
+            onRetry: () => _load(force: true),
+            onPlay: (episode) => _play(episode, _home!.episodes),
+            onPlayAll: () {
+              if (_home!.episodes.isEmpty) return;
+              final rec = _home!.episodes.first;
+              if (widget.player.current?.id == rec.id) {
+                widget.player.toggle();
+              } else {
+                _play(rec, _home!.episodes);
+              }
+            },
+            onResume: () {
+              if (!widget.player.playing) widget.player.toggle();
+            },
+            onSearch: () => _go(AppScreen.search),
+            onOpenAlbums: () => _go(AppScreen.albums),
+          ),
         ),
-      AppScreen.albums => AlbumsScreen(
-          catalog: catalog,
-          favoriteIds: _favoriteIds,
-          onBack: _back,
-          onSearch: () => _go(AppScreen.search),
-          onOpenAlbum: (album) => _go(AppScreen.album, album: album),
-          onToggleFavorite: _toggleFavorite,
-        ),
-      AppScreen.search => SearchView(
-          catalog: catalog,
-          query: _searchQuery,
-          favoriteIds: _favoriteIds,
-          onBack: _back,
-          onQuery: (value) => setState(() => _searchQuery = value),
-          onOpenAlbum: (album) => _go(AppScreen.album, album: album),
-          onToggleFavorite: _toggleFavorite,
-        ),
-      AppScreen.album => AlbumView(
-          api: widget.api,
-          album: _album!,
-          favorited: _favoriteIds.contains(_album!.id),
-          onBack: _back,
-          onPlay: (episode, queue) => _play(episode, queue),
-          onAddLater: _addLater,
-          onToggleFavorite: () => _toggleFavorite(_album!.id),
-        ),
-      AppScreen.favorites => FavoritesView(
-          catalog: catalog,
-          favoriteIds: _favoriteIds,
-          onBack: _back,
-          onBrowse: () => _go(AppScreen.albums),
-          onOpenAlbum: (album) => _go(AppScreen.album, album: album),
-          onToggleFavorite: _toggleFavorite,
-        ),
-    };
+        if (_screen == AppScreen.albums || _screen == AppScreen.album)
+          MaterialPage<void>(
+            key: const ValueKey('albums'),
+            child: AlbumsScreen(
+              catalog: catalog,
+              favoriteIds: _favoriteIds,
+              onBack: _back,
+              onSearch: () => _go(AppScreen.search),
+              onOpenAlbum: (album) => _go(AppScreen.album, album: album),
+              onToggleFavorite: _toggleFavorite,
+            ),
+          ),
+        if (_screen == AppScreen.search)
+          MaterialPage<void>(
+            key: const ValueKey('search'),
+            child: SearchView(
+              catalog: catalog,
+              query: _searchQuery,
+              favoriteIds: _favoriteIds,
+              onBack: _back,
+              onQuery: (value) => setState(() => _searchQuery = value),
+              onOpenAlbum: (album) => _go(AppScreen.album, album: album),
+              onToggleFavorite: _toggleFavorite,
+            ),
+          ),
+        if (_screen == AppScreen.album && _album != null)
+          MaterialPage<void>(
+            key: ValueKey('album-${_album!.id}'),
+            child: AlbumView(
+              api: widget.api,
+              album: _album!,
+              favorited: _favoriteIds.contains(_album!.id),
+              onBack: _back,
+              onPlay: (episode, queue) => _play(episode, queue),
+              onAddLater: _addLater,
+              onToggleFavorite: () => _toggleFavorite(_album!.id),
+            ),
+          ),
+        if (_screen == AppScreen.favorites)
+          MaterialPage<void>(
+            key: const ValueKey('favorites'),
+            child: FavoritesView(
+              catalog: catalog,
+              favoriteIds: _favoriteIds,
+              onBack: _back,
+              onBrowse: () => _go(AppScreen.albums),
+              onOpenAlbum: (album) => _go(AppScreen.album, album: album),
+              onToggleFavorite: _toggleFavorite,
+            ),
+          ),
+      ],
+      onDidRemovePage: (_) {},
+    );
   }
 }
 

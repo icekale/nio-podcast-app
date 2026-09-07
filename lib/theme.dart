@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -65,6 +66,12 @@ ThemeData nioTheme(Brightness brightness) {
       onSurface: palette.ink,
       error: palette.danger,
       onError: palette.surface,
+    ),
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
     ),
     appBarTheme: AppBarTheme(
       backgroundColor: palette.aqua,
