@@ -80,8 +80,9 @@ void main() {
     await tester.tap(find.byTooltip('全部专辑'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
-    expect(find.text('资讯热点'), findsOneWidget);
+    expect(find.text('全部专辑'), findsWidgets);
     expect(find.text('今日推荐'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('全部专辑').first).dx, greaterThan(8));
     await tester.pumpAndSettle();
     expect(find.text('资讯热点'), findsOneWidget);
 
@@ -98,7 +99,7 @@ void main() {
     expect(find.byIcon(Icons.favorite_border), findsWidgets);
     expect(find.byIcon(Icons.star_border), findsNothing);
 
-    await tester.tap(find.byTooltip('搜索'));
+    await tester.tap(find.byTooltip('搜索').last);
     await tester.pumpAndSettle();
     expect(find.text('搜索专辑'), findsOneWidget);
 
@@ -171,7 +172,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('全部专辑'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('资讯充电站'));
+    await tester.tap(find.text('资讯充电站').last);
     await tester.pumpAndSettle();
     expect(find.text('加载更多'), findsNothing);
     expect(find.text('专辑节目1'), findsOneWidget);

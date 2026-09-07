@@ -23,7 +23,7 @@ class RadioApp extends StatefulWidget {
   State<RadioApp> createState() => _RadioAppState();
 }
 
-class _RadioAppState extends State<RadioApp> {
+class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin {
   AppScreen _screen = AppScreen.home;
   Album? _album;
   String _searchQuery = '';
@@ -38,24 +38,35 @@ class _RadioAppState extends State<RadioApp> {
   String _queueTab = 'queue';
   Timer? _sleep;
   String? _sleepLabel;
-  final _navKey = GlobalKey<NavigatorState>();
+  late final AnimationController _pageSlide;
+  late final Animation<Offset> _pageOffset;
+  final _navTick = ValueNotifier(0);
 
   @override
   void initState() {
     super.initState();
-    widget.player.addListener(_onPlayer);
+    _pageSlide = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 260),
+    );
+    _pageOffset = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(
+      CurvedAnimation(parent: _pageSlide, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic),
+    );
+    _pageSlide.addStatusListener((status) {
+      if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
+        _navTick.value++;
+      }
+    });
     _load();
   }
 
   @override
   void dispose() {
-    widget.player.removeListener(_onPlayer);
+    _pageSlide.dispose();
+    _navTick.dispose();
     _sleep?.cancel();
     super.dispose();
-  }
-
-  void _onPlayer() {
-    if (mounted) setState(() {});
   }
 
   Future<void> _load({bool force = false}) async {
@@ -99,20 +110,25 @@ class _RadioAppState extends State<RadioApp> {
   }
 
   void _go(AppScreen screen, {Album? album, String? query}) {
-    setState(() {
-      _screen = screen;
-      if (album != null) _album = album;
-      if (query != null) _searchQuery = query;
-    });
+    final fromHome = _screen == AppScreen.home;
+    _screen = screen;
+    if (album != null) _album = album;
+    if (query != null) _searchQuery = query;
+    _navTick.value++;
+    if (fromHome) _pageSlide.forward();
   }
 
   void _back() {
-    setState(() {
-      if (_screen == AppScreen.album) {
-        _screen = AppScreen.albums;
-      } else if (_screen != AppScreen.home) {
-        _screen = AppScreen.home;
-      }
+    if (_screen == AppScreen.album) {
+      _screen = AppScreen.albums;
+      _navTick.value++;
+      return;
+    }
+    if (_screen == AppScreen.home) return;
+    _pageSlide.reverse().whenComplete(() {
+      if (!mounted || _pageSlide.isAnimating) return;
+      _screen = AppScreen.home;
+      _navTick.value++;
     });
   }
 
@@ -210,18 +226,23 @@ class _RadioAppState extends State<RadioApp> {
         body: Stack(
           children: [
             Positioned.fill(child: _body()),
-            if (widget.player.current != null)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12 + MediaQuery.paddingOf(context).bottom,
-                child: MiniPlayerBar(
-                  player: widget.player,
-                  onToggle: widget.player.toggle,
-                  onSeek: widget.player.seek,
-                  onOpenQueue: _openQueue,
-                ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12 + MediaQuery.paddingOf(context).bottom,
+              child: ListenableBuilder(
+                listenable: widget.player,
+                builder: (context, _) {
+                  if (widget.player.current == null) return const SizedBox.shrink();
+                  return MiniPlayerBar(
+                    player: widget.player,
+                    onToggle: widget.player.toggle,
+                    onSeek: widget.player.seek,
+                    onOpenQueue: _openQueue,
+                  );
+                },
               ),
+            ),
           ],
         ),
       ),
@@ -262,11 +283,12 @@ class _RadioAppState extends State<RadioApp> {
       );
     }
     final catalog = _catalog!;
-    return Navigator(
-      key: _navKey,
-      pages: [
-        _SlidePage(
-          key: const ValueKey('home'),
+    final palette = NioPalette(Theme.of(context).brightness);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        RepaintBoundary(
+          child: SizedBox.expand(
           child: HomeScreen(
             home: _home!,
             player: widget.player,
@@ -290,115 +312,76 @@ class _RadioAppState extends State<RadioApp> {
             onSearch: () => _go(AppScreen.search),
             onOpenAlbums: () => _go(AppScreen.albums),
           ),
+          ),
         ),
-        if (_screen == AppScreen.albums || _screen == AppScreen.album)
-          _SlidePage(
-            key: const ValueKey('albums'),
-            child: AlbumsScreen(
-              catalog: catalog,
-              favoriteIds: _favoriteIds,
-              onBack: _back,
-              onSearch: () => _go(AppScreen.search),
-              onOpenAlbum: (album) => _go(AppScreen.album, album: album),
-              onToggleFavorite: _toggleFavorite,
+        RepaintBoundary(
+          child: ClipRect(
+            child: SlideTransition(
+              position: _pageOffset,
+              child: ValueListenableBuilder<int>(
+                valueListenable: _navTick,
+                builder: (context, _, _) {
+                  return IgnorePointer(
+                    ignoring: _screen == AppScreen.home,
+                    child: ColoredBox(
+                      color: palette.surface,
+                      child: _screen == AppScreen.home
+                          ? const SizedBox.expand()
+                          : _foreground(catalog),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        if (_screen == AppScreen.search)
-          _SlidePage(
-            key: const ValueKey('search'),
-            child: SearchView(
-              catalog: catalog,
-              query: _searchQuery,
-              favoriteIds: _favoriteIds,
-              onBack: _back,
-              onQuery: (value) => setState(() => _searchQuery = value),
-              onOpenAlbum: (album) => _go(AppScreen.album, album: album),
-              onToggleFavorite: _toggleFavorite,
-            ),
-          ),
-        if (_screen == AppScreen.album && _album != null)
-          _SlidePage(
-            key: ValueKey('album-${_album!.id}'),
-            child: AlbumView(
-              api: widget.api,
-              album: _album!,
-              favorited: _favoriteIds.contains(_album!.id),
-              onBack: _back,
-              onPlay: (episode, queue) => _play(episode, queue),
-              onAddLater: _addLater,
-              onToggleFavorite: () => _toggleFavorite(_album!.id),
-            ),
-          ),
-        if (_screen == AppScreen.favorites)
-          _SlidePage(
-            key: const ValueKey('favorites'),
-            child: FavoritesView(
-              catalog: catalog,
-              favoriteIds: _favoriteIds,
-              onBack: _back,
-              onBrowse: () => _go(AppScreen.albums),
-              onOpenAlbum: (album) => _go(AppScreen.album, album: album),
-              onToggleFavorite: _toggleFavorite,
-            ),
-          ),
+        ),
       ],
-      onDidRemovePage: (_) {},
-    );
-  }
-}
-
-class _SlidePage extends Page<void> {
-  const _SlidePage({required super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Route<void> createRoute(BuildContext context) => _SlideRoute(this);
-}
-
-class _SlideRoute extends PageRoute<void> {
-  _SlideRoute(_SlidePage page) : super(settings: page);
-
-  @override
-  Color? get barrierColor => null;
-
-  @override
-  String? get barrierLabel => null;
-
-  @override
-  bool get maintainState => true;
-
-  @override
-  bool get opaque => true;
-
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 320);
-
-  @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 280);
-
-  @override
-  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
-    return ColoredBox(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: (settings as _SlidePage).child,
     );
   }
 
-  @override
-  Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    return ClipRect(
-      child: SlideTransition(
-        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-            .chain(CurveTween(curve: Curves.easeOutCubic))
-            .animate(animation),
-        child: child,
-      ),
+  Widget _foreground(Catalog catalog) {
+    final showGrid = _pageSlide.status != AnimationStatus.forward;
+    if (_screen == AppScreen.search) {
+      return SearchView(
+        catalog: catalog,
+        query: _searchQuery,
+        favoriteIds: _favoriteIds,
+        showGrid: showGrid,
+        onBack: _back,
+        onQuery: (value) => setState(() => _searchQuery = value),
+        onOpenAlbum: (album) => _go(AppScreen.album, album: album),
+        onToggleFavorite: _toggleFavorite,
+      );
+    }
+    if (_screen == AppScreen.album && _album != null) {
+      return AlbumView(
+        api: widget.api,
+        album: _album!,
+        favorited: _favoriteIds.contains(_album!.id),
+        onBack: _back,
+        onPlay: (episode, queue) => _play(episode, queue),
+        onAddLater: _addLater,
+        onToggleFavorite: () => _toggleFavorite(_album!.id),
+      );
+    }
+    if (_screen == AppScreen.favorites) {
+      return FavoritesView(
+        catalog: catalog,
+        favoriteIds: _favoriteIds,
+        onBack: _back,
+        onBrowse: () => _go(AppScreen.albums),
+        onOpenAlbum: (album) => _go(AppScreen.album, album: album),
+        onToggleFavorite: _toggleFavorite,
+      );
+    }
+    return AlbumsScreen(
+      catalog: catalog,
+      favoriteIds: _favoriteIds,
+      showGrid: showGrid,
+      onBack: _back,
+      onSearch: () => _go(AppScreen.search),
+      onOpenAlbum: (album) => _go(AppScreen.album, album: album),
+      onToggleFavorite: _toggleFavorite,
     );
   }
 }
@@ -463,6 +446,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.player,
+      builder: (context, _) {
     final palette = NioPalette(Theme.of(context).brightness);
     final rec = widget.home.episodes.isEmpty ? null : widget.home.episodes.first;
     final playingRec = rec != null && widget.player.current?.id == rec.id;
@@ -584,6 +570,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -592,6 +580,7 @@ class AlbumsScreen extends StatelessWidget {
     super.key,
     required this.catalog,
     required this.favoriteIds,
+    this.showGrid = true,
     required this.onBack,
     required this.onSearch,
     required this.onOpenAlbum,
@@ -600,6 +589,7 @@ class AlbumsScreen extends StatelessWidget {
 
   final Catalog catalog;
   final List<int> favoriteIds;
+  final bool showGrid;
   final VoidCallback onBack;
   final VoidCallback onSearch;
   final ValueChanged<Album> onOpenAlbum;
@@ -620,7 +610,8 @@ class AlbumsScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 32, 20, 160),
             children: [
               SectionHeading(title: '全部专辑', count: catalog.albums.length),
-              CategoryAlbumSections(albums: catalog.albums, favoriteIds: favoriteIds, onOpenAlbum: onOpenAlbum, onToggleFavorite: onToggleFavorite),
+              if (showGrid)
+                CategoryAlbumSections(albums: catalog.albums, favoriteIds: favoriteIds, onOpenAlbum: onOpenAlbum, onToggleFavorite: onToggleFavorite),
               if (catalog.albums.isEmpty) Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 48), child: Text('暂无可用专辑', style: TextStyle(color: palette.mutedStrong)))),
             ],
           ),
@@ -636,6 +627,7 @@ class SearchView extends StatelessWidget {
     required this.catalog,
     required this.query,
     required this.favoriteIds,
+    this.showGrid = true,
     required this.onBack,
     required this.onQuery,
     required this.onOpenAlbum,
@@ -645,6 +637,7 @@ class SearchView extends StatelessWidget {
   final Catalog catalog;
   final String query;
   final List<int> favoriteIds;
+  final bool showGrid;
   final VoidCallback onBack;
   final ValueChanged<String> onQuery;
   final ValueChanged<Album> onOpenAlbum;
@@ -675,7 +668,7 @@ class SearchView extends StatelessWidget {
               if (searching) ...[
                 AlbumGrid(albums: filtered, favoriteIds: favoriteIds, onOpenAlbum: onOpenAlbum, onToggleFavorite: onToggleFavorite),
                 if (filtered.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 48), child: Center(child: Text('没有找到匹配的专辑', style: TextStyle(color: palette.mutedStrong)))),
-              ] else
+              ] else if (showGrid)
                 CategoryAlbumSections(albums: catalog.albums, favoriteIds: favoriteIds, onOpenAlbum: onOpenAlbum, onToggleFavorite: onToggleFavorite),
             ],
           ),
