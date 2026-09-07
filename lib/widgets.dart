@@ -22,15 +22,19 @@ class Artwork extends StatelessWidget {
       child: ColoredBox(
         color: palette.surfaceSoft,
         child: url.isEmpty
-            ? SizedBox(width: width, height: height, child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22))
+            ? SizedBox(
+                width: width ?? double.infinity,
+                height: height ?? double.infinity,
+                child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22),
+              )
             : Image.network(
                 url,
-                width: width,
-                height: height,
+                width: width ?? double.infinity,
+                height: height ?? double.infinity,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => SizedBox(
-                  width: width,
-                  height: height,
+                  width: width ?? double.infinity,
+                  height: height ?? double.infinity,
                   child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22),
                 ),
               ),
@@ -117,7 +121,12 @@ class FavoriteButton extends StatelessWidget {
     return IconButton(
       tooltip: favorited ? '取消收藏 $name' : '收藏 $name',
       onPressed: onPressed,
-      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        minimumSize: const Size(36, 36),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+      ),
       icon: Icon(
         favorited ? Icons.favorite : Icons.favorite_border,
         size: 18,
@@ -263,10 +272,12 @@ class AlbumRow extends StatelessWidget {
         : FavoriteButton(favorited: favorited, name: album.name, onPressed: toggle);
     if (grid) {
       return Stack(
+        clipBehavior: Clip.hardEdge,
         children: [
           InkWell(
             onTap: onOpen,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 AspectRatio(

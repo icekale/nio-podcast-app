@@ -841,24 +841,29 @@ class AlbumGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: albums.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 20,
-        crossAxisSpacing: 16,
-        childAspectRatio: 0.72,
-      ),
-      itemBuilder: (context, index) {
-        final album = albums[index];
-        return AlbumRow(
-          album: album,
-          grid: true,
-          favorited: favoriteIds.contains(album.id),
-          onOpen: () => onOpenAlbum(album),
-          onToggleFavorite: () => onToggleFavorite(album.id),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 16.0;
+        final width = (constraints.maxWidth - gap) / 2;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Wrap(
+            spacing: gap,
+            runSpacing: 20,
+            children: [
+              for (final album in albums)
+                SizedBox(
+                  width: width,
+                  child: AlbumRow(
+                    album: album,
+                    grid: true,
+                    favorited: favoriteIds.contains(album.id),
+                    onOpen: () => onOpenAlbum(album),
+                    onToggleFavorite: () => onToggleFavorite(album.id),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
