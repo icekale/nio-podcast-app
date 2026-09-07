@@ -68,6 +68,18 @@ class RadioPlayer extends ChangeNotifier {
 
   Future<void> playQueue(List<Episode> nextQueue, int nextIndex) async {
     if (nextIndex < 0 || nextIndex >= nextQueue.length) return;
+    final next = nextQueue[nextIndex];
+    if (current?.id == next.id) {
+      queue = List.of(nextQueue);
+      index = nextIndex;
+      notifyListeners();
+      if (!playing && next.audioUrl.isNotEmpty) {
+        playing = true;
+        notifyListeners();
+        if (!skipAudio) await engine.play();
+      }
+      return;
+    }
     queue = List.of(nextQueue);
     index = nextIndex;
     current = queue[index];

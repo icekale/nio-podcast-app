@@ -87,4 +87,77 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('搜索专辑'), findsOneWidget);
   });
+
+  testWidgets('album auto-loads next page without a button', (tester) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final client = MockClient((request) async {
+      if (request.url.toString() == daytimeUrl) {
+        return http.Response(jsonEncode({'result': []}), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+      }
+      if (request.url.toString() == albumListUrl) {
+        final page = int.tryParse(Uri.splitQueryString(request.body)['pagenum'] ?? '1') ?? 1;
+        final start = (page - 1) * 30;
+        return http.Response(
+          jsonEncode({
+            'result': {
+              'haveNext': page == 1 ? 1 : 0,
+              'dataList': [
+                for (var i = start; i < start + 30 && i < 35; i++)
+                  {
+                    'audioId': 100 + i,
+                    'audioName': '专辑节目${i + 1}',
+                    'albumId': 5,
+                    'albumName': '资讯充电站',
+                    'albumPic': '',
+                    'host': '',
+                    'duration': 60000,
+                    'onlineTime': nowMs,
+                    'aacPlayUrl192': 'https://cdn.example/e.m4a',
+                  },
+              ],
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      return http.Response(
+        jsonEncode({
+          'generatedAt': nowMs,
+          'albums': [
+            {
+              'id': 5,
+              'name': '资讯充电站',
+              'imageUrl': '',
+              'category': 'news',
+              'latestEpisode': {
+                'id': 11,
+                'title': '早间新闻',
+                'albumId': 5,
+                'albumName': '资讯充电站',
+                'albumPic': '',
+                'host': '',
+                'duration': 60000,
+                'onlineTime': nowMs,
+                'audioUrl': 'https://cdn.example/a.m4a',
+              },
+            },
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: client), player: RadioPlayer(skipAudio: true)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('全部专辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('资讯充电站'));
+    await tester.pumpAndSettle();
+    expect(find.text('加载更多'), findsNothing);
+    expect(find.text('专辑节目1'), findsOneWidget);
+    await tester.fling(find.byType(ListView), const Offset(0, -4000), 3000);
+    await tester.pumpAndSettle();
+    expect(find.text('专辑节目35'), findsOneWidget);
+  });
 }

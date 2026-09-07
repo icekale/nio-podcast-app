@@ -318,7 +318,7 @@ class HomeScreen extends StatefulWidget {
   final bool stale;
   final bool refreshing;
   final Object? error;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
   final ValueChanged<Episode> onPlay;
   final VoidCallback onPlayAll;
   final VoidCallback onResume;
@@ -361,9 +361,13 @@ class _HomeScreenState extends State<HomeScreen> {
       playIcon = widget.player.playing ? Icons.pause : Icons.play_arrow;
     }
 
-    return NotificationListener<ScrollNotification>(
+    return RefreshIndicator(
+      color: palette.teal,
+      onRefresh: widget.onRetry,
+      child: NotificationListener<ScrollNotification>(
       onNotification: _onScroll,
       child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
             child: TopBar(
@@ -464,6 +468,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -593,6 +598,7 @@ class AlbumView extends StatefulWidget {
 
 class _AlbumViewState extends State<AlbumView> {
   final _episodes = <Episode>[];
+  final _scroll = ScrollController();
   var _page = 1;
   var _hasMore = false;
   var _loading = true;
@@ -601,12 +607,25 @@ class _AlbumViewState extends State<AlbumView> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_tryLoadMore);
     _load(1);
   }
 
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _tryLoadMore() {
+    if (!_scroll.hasClients || _loading || !_hasMore || _error != null) return;
+    if (_scroll.position.extentAfter < 400) _load(_page + 1);
+  }
+
   Future<void> _load(int page) async {
+    if (page > 1 && _loading) return;
+    _loading = true;
     setState(() {
-      _loading = true;
       _error = null;
       if (page == 1) _episodes.clear();
     });
@@ -618,6 +637,9 @@ class _AlbumViewState extends State<AlbumView> {
         _page = page;
         _hasMore = result.hasMore;
         _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _tryLoadMore();
       });
     } catch (error) {
       if (!mounted) return;
@@ -646,6 +668,7 @@ class _AlbumViewState extends State<AlbumView> {
         ),
         Expanded(
           child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(20, 32, 20, 160),
             children: [
               Row(
@@ -694,8 +717,6 @@ class _AlbumViewState extends State<AlbumView> {
                   ),
                 ),
               if (!_loading && _error == null && _episodes.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 48), child: Center(child: Text('这个专辑还没有节目'))),
-              if (_hasMore && !_loading)
-                TextButton(onPressed: () => _load(_page + 1), child: const Text('加载更多')),
               if (_loading && _episodes.isNotEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('正在加载下一页…'))),
             ],
           ),
