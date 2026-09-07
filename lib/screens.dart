@@ -38,6 +38,7 @@ class _RadioAppState extends State<RadioApp> {
   String _queueTab = 'queue';
   Timer? _sleep;
   String? _sleepLabel;
+  final _navKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -256,8 +257,9 @@ class _RadioAppState extends State<RadioApp> {
     }
     final catalog = _catalog!;
     return Navigator(
+      key: _navKey,
       pages: [
-        MaterialPage<void>(
+        _SlidePage(
           key: const ValueKey('home'),
           child: HomeScreen(
             home: _home!,
@@ -284,7 +286,7 @@ class _RadioAppState extends State<RadioApp> {
           ),
         ),
         if (_screen == AppScreen.albums || _screen == AppScreen.album)
-          MaterialPage<void>(
+          _SlidePage(
             key: const ValueKey('albums'),
             child: AlbumsScreen(
               catalog: catalog,
@@ -296,7 +298,7 @@ class _RadioAppState extends State<RadioApp> {
             ),
           ),
         if (_screen == AppScreen.search)
-          MaterialPage<void>(
+          _SlidePage(
             key: const ValueKey('search'),
             child: SearchView(
               catalog: catalog,
@@ -309,7 +311,7 @@ class _RadioAppState extends State<RadioApp> {
             ),
           ),
         if (_screen == AppScreen.album && _album != null)
-          MaterialPage<void>(
+          _SlidePage(
             key: ValueKey('album-${_album!.id}'),
             child: AlbumView(
               api: widget.api,
@@ -322,7 +324,7 @@ class _RadioAppState extends State<RadioApp> {
             ),
           ),
         if (_screen == AppScreen.favorites)
-          MaterialPage<void>(
+          _SlidePage(
             key: const ValueKey('favorites'),
             child: FavoritesView(
               catalog: catalog,
@@ -335,6 +337,62 @@ class _RadioAppState extends State<RadioApp> {
           ),
       ],
       onDidRemovePage: (_) {},
+    );
+  }
+}
+
+class _SlidePage extends Page<void> {
+  const _SlidePage({required super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Route<void> createRoute(BuildContext context) => _SlideRoute(this);
+}
+
+class _SlideRoute extends PageRoute<void> {
+  _SlideRoute(_SlidePage page) : super(settings: page);
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  bool get opaque => true;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 320);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 280);
+
+  @override
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+    return (settings as _SlidePage).child;
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return SlideTransition(
+      position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+          .chain(CurveTween(curve: Curves.easeOutCubic))
+          .animate(animation),
+      child: SlideTransition(
+        position: Tween<Offset>(begin: Offset.zero, end: const Offset(-0.2, 0))
+            .chain(CurveTween(curve: Curves.easeOutCubic))
+            .animate(secondaryAnimation),
+        child: child,
+      ),
     );
   }
 }

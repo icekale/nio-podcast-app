@@ -78,10 +78,17 @@ void main() {
     expect(find.byTooltip('打开播放列表'), findsOneWidget);
 
     await tester.tap(find.byTooltip('全部专辑'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('资讯热点'), findsOneWidget);
+    expect(find.text('今日推荐'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.text('资讯热点'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('今日推荐'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.text('今日推荐'), findsOneWidget);
 
