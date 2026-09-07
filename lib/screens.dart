@@ -272,9 +272,11 @@ class _RadioAppState extends State<RadioApp> {
       AppScreen.album => AlbumView(
           api: widget.api,
           album: _album!,
+          favorited: _favoriteIds.contains(_album!.id),
           onBack: _back,
           onPlay: (episode, queue) => _play(episode, queue),
           onAddLater: _addLater,
+          onToggleFavorite: () => _toggleFavorite(_album!.id),
         ),
       AppScreen.favorites => FavoritesView(
           catalog: catalog,
@@ -573,13 +575,17 @@ class AlbumView extends StatefulWidget {
     required this.onBack,
     required this.onPlay,
     required this.onAddLater,
+    required this.favorited,
+    required this.onToggleFavorite,
   });
 
   final NioApi api;
   final Album album;
+  final bool favorited;
   final VoidCallback onBack;
   final void Function(Episode episode, List<Episode> queue) onPlay;
   final LaterAddResult Function(Episode episode) onAddLater;
+  final VoidCallback onToggleFavorite;
 
   @override
   State<AlbumView> createState() => _AlbumViewState();
@@ -630,6 +636,7 @@ class _AlbumViewState extends State<AlbumView> {
       children: [
         TopBar(
           leading: IconCircleButton(icon: Icons.arrow_back, tooltip: '返回专辑列表', onPressed: widget.onBack),
+          trailing: FavoriteButton(favorited: widget.favorited, name: album.name, onPressed: widget.onToggleFavorite),
           title: Column(
             children: [
               Text(album.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),

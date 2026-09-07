@@ -99,6 +99,34 @@ class IconCircleButton extends StatelessWidget {
   }
 }
 
+class FavoriteButton extends StatelessWidget {
+  const FavoriteButton({
+    super.key,
+    required this.favorited,
+    required this.onPressed,
+    this.name = '',
+  });
+
+  final bool favorited;
+  final VoidCallback onPressed;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = NioPalette(Theme.of(context).brightness);
+    return IconButton(
+      tooltip: favorited ? '取消收藏 $name' : '收藏 $name',
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      icon: Icon(
+        favorited ? Icons.favorite : Icons.favorite_border,
+        size: 18,
+        color: favorited ? NioColors.logoTeal : palette.muted,
+      ),
+    );
+  }
+}
+
 class PrimaryPillButton extends StatelessWidget {
   const PrimaryPillButton({super.key, required this.label, required this.icon, this.onPressed});
 
@@ -229,13 +257,10 @@ class AlbumRow extends StatelessWidget {
     final subtitle = album.directorySubtitle.isNotEmpty
         ? album.directorySubtitle
         : (album.latestEpisode?.title ?? (album.description.isEmpty ? '暂无节目' : album.description));
-    final star = onToggleFavorite == null
+    final toggle = onToggleFavorite;
+    final heart = toggle == null
         ? null
-        : IconButton(
-            tooltip: favorited ? '取消收藏 ${album.name}' : '收藏 ${album.name}',
-            onPressed: onToggleFavorite,
-            icon: Icon(favorited ? Icons.star : Icons.star_border, color: favorited ? NioColors.logoTeal : palette.muted),
-          );
+        : FavoriteButton(favorited: favorited, name: album.name, onPressed: toggle);
     if (grid) {
       return Stack(
         children: [
@@ -261,7 +286,7 @@ class AlbumRow extends StatelessWidget {
               ],
             ),
           ),
-          if (star != null) Positioned(right: 0, bottom: 0, child: star),
+          if (heart != null) Positioned(right: 0, bottom: 0, child: heart),
         ],
       );
     }
@@ -294,7 +319,7 @@ class AlbumRow extends StatelessWidget {
               ),
             ),
           ),
-          ?star,
+          ?heart,
         ],
       ),
     );
