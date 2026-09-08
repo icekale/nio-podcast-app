@@ -3,6 +3,7 @@ name: APK
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -50,8 +51,19 @@ jobs:
           path: |
             NIO-Radio.apk
             NIO-Radio-armv7.apk
-      - env:
+      - if: startsWith(github.ref, 'refs/tags/v')
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --title "v$VERSION" --notes "NIO Radio Flutter Android APK"
+          NOTES="$(printf '%s\n' \
+            'NIO Radio '"$VERSION" \
+            '' \
+            'Flutter 原生客户端（非 WebView）。首页今日推荐、全部专辑、搜索、专辑页、播放器、播放列表。' \
+            '' \
+            '下载' \
+            '- 现机（arm64）：NIO-Radio.apk' \
+            '- 32 位老机型：NIO-Radio-armv7.apk' \
+            '' \
+            '首次安装请允许通知权限，锁屏和下拉菜单才会显示播放卡片。')"
+          gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --title "NIO Radio $VERSION" --notes "$NOTES" --latest
           gh release upload "v$VERSION" NIO-Radio.apk NIO-Radio-armv7.apk --clobber
