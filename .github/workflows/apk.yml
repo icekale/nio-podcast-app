@@ -24,8 +24,12 @@ jobs:
           VERSION="$(grep -E '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Decode release keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/release.jks
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/release.jks
+          else
+            echo "ANDROID_KEYSTORE_BASE64 not set; falling back to debug signing"
+          fi
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
