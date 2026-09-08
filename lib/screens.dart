@@ -25,7 +25,7 @@ class RadioApp extends StatefulWidget {
   State<RadioApp> createState() => _RadioAppState();
 }
 
-class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin {
+class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
   AppScreen _screen = AppScreen.home;
   AppScreen? _albumReturn;
   Album? _album;
@@ -49,19 +49,18 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
   AppLifecycleListener? _lifecycle;
   late final AnimationController _pageSlide;
   late final Animation<Offset> _pageOffset;
+  late final AnimationController _coverSlide;
+  late final Animation<Offset> _coverOffset;
   final _navTick = ValueNotifier(0);
+  final _coverTick = ValueNotifier(0);
 
   @override
   void initState() {
     super.initState();
-    _pageSlide = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 260),
-    );
-    _pageOffset = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(
-      CurvedAnimation(parent: _pageSlide, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic),
-    );
+    _pageSlide = _newSlide();
+    _pageOffset = _slideOffset(_pageSlide);
+    _coverSlide = _newSlide();
+    _coverOffset = _slideOffset(_coverSlide);
     _pageSlide.addStatusListener((status) {
       if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
         _navTick.value++;
@@ -76,7 +75,9 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
   @override
   void dispose() {
     _pageSlide.dispose();
+    _coverSlide.dispose();
     _navTick.dispose();
+    _coverTick.dispose();
     _sleep?.cancel();
     widget.player.removeListener(_persistPlayback);
     _lifecycle?.dispose();
@@ -167,11 +168,29 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
     }
   }
 
+  AnimationController _newSlide() => AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 300),
+        reverseDuration: const Duration(milliseconds: 260),
+      );
+
+  Animation<Offset> _slideOffset(AnimationController controller) =>
+      Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(
+        CurvedAnimation(parent: controller, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic),
+      );
+
   void _go(AppScreen screen, {Album? album, String? query}) {
-    final fromHome = _screen == AppScreen.home;
-    if (screen == AppScreen.album) _albumReturn = _screen;
+    if (screen == AppScreen.album) {
+      if (_screen != AppScreen.album) _albumReturn = _screen;
+      _screen = AppScreen.album;
+      if (album != null) _album = album;
+      _coverTick.value++;
+      if (_pageSlide.isDismissed) _pageSlide.forward();
+      _coverSlide.forward();
+      return;
+    }
+    final fromHome = _screen == AppScreen.home || _pageSlide.isDismissed;
     _screen = screen;
-    if (album != null) _album = album;
     if (query != null) _searchQuery = query;
     _navTick.value++;
     if (fromHome) _pageSlide.forward();
@@ -179,8 +198,12 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
 
   void _back() {
     if (_screen == AppScreen.album) {
-      _screen = _albumReturn ?? AppScreen.albums;
-      _navTick.value++;
+      _coverSlide.reverse().whenComplete(() {
+        if (!mounted || _coverSlide.isAnimating) return;
+        _screen = _albumReturn ?? AppScreen.albums;
+        _album = null;
+        _coverTick.value++;
+      });
       return;
     }
     if (_screen == AppScreen.home) return;
@@ -304,12 +327,26 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
               child: ListenableBuilder(
                 listenable: widget.player,
                 builder: (context, _) {
-                  if (widget.player.current == null) return const SizedBox.shrink();
-                  return MiniPlayerBar(
-                    player: widget.player,
-                    onToggle: widget.player.toggle,
-                    onSeek: widget.player.seek,
-                    onOpenQueue: _openQueue,
+                  final show = !_loading && widget.player.current != null;
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) {
+                      return SlideTransition(
+                        position: Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero).animate(animation),
+                        child: FadeTransition(opacity: animation, child: child),
+                      );
+                    },
+                    child: show
+                        ? MiniPlayerBar(
+                            key: const ValueKey('mini'),
+                            player: widget.player,
+                            onToggle: widget.player.toggle,
+                            onSeek: widget.player.seek,
+                            onOpenQueue: _openQueue,
+                          )
+                        : const SizedBox.shrink(key: ValueKey('mini-off')),
                   );
                 },
               ),
@@ -398,7 +435,26 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
                       color: palette.surface,
                       child: _screen == AppScreen.home
                           ? const SizedBox.expand()
-                          : _foreground(catalog),
+                          : _listPage(catalog),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        RepaintBoundary(
+          child: ClipRect(
+            child: SlideTransition(
+              position: _coverOffset,
+              child: ValueListenableBuilder<int>(
+                valueListenable: _coverTick,
+                builder: (context, _, _) {
+                  return IgnorePointer(
+                    ignoring: _album == null,
+                    child: ColoredBox(
+                      color: palette.surface,
+                      child: _album == null ? const SizedBox.expand() : _albumPage(),
                     ),
                   );
                 },
@@ -410,9 +466,14 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _foreground(Catalog catalog) {
+  AppScreen get _listScreen {
+    if (_screen == AppScreen.album) return _albumReturn ?? AppScreen.albums;
+    return _screen;
+  }
+
+  Widget _listPage(Catalog catalog) {
     final showGrid = _pageSlide.status != AnimationStatus.forward;
-    if (_screen == AppScreen.search) {
+    if (_listScreen == AppScreen.search) {
       return SearchView(
         catalog: catalog,
         query: _searchQuery,
@@ -424,18 +485,7 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
         onToggleFavorite: _toggleFavorite,
       );
     }
-    if (_screen == AppScreen.album && _album != null) {
-      return AlbumView(
-        api: widget.api,
-        album: _album!,
-        favorited: _favoriteIds.contains(_album!.id),
-        onBack: _back,
-        onPlay: (episode, queue) => _play(episode, queue),
-        onAddLater: _addLater,
-        onToggleFavorite: () => _toggleFavorite(_album!.id),
-      );
-    }
-    if (_screen == AppScreen.favorites) {
+    if (_listScreen == AppScreen.favorites) {
       return FavoritesView(
         catalog: catalog,
         favoriteIds: _favoriteIds,
@@ -453,6 +503,18 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
       onSearch: () => _go(AppScreen.search),
       onOpenAlbum: (album) => _go(AppScreen.album, album: album),
       onToggleFavorite: _toggleFavorite,
+    );
+  }
+
+  Widget _albumPage() {
+    return AlbumView(
+      api: widget.api,
+      album: _album!,
+      favorited: _favoriteIds.contains(_album!.id),
+      onBack: _back,
+      onPlay: (episode, queue) => _play(episode, queue),
+      onAddLater: _addLater,
+      onToggleFavorite: () => _toggleFavorite(_album!.id),
     );
   }
 }

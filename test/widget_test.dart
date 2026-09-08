@@ -210,12 +210,24 @@ void main() {
     await tester.tap(find.byTooltip('全部专辑'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('资讯充电站').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('资讯热点'), findsOneWidget);
+    expect(tester.getTopLeft(find.byTooltip('返回专辑列表')).dx, greaterThan(8));
     await tester.pumpAndSettle();
     expect(find.text('加载更多'), findsNothing);
     expect(find.text('专辑节目1'), findsOneWidget);
-    await tester.fling(find.byType(ListView), const Offset(0, -4000), 3000);
+    await tester.fling(find.byType(ListView).last, const Offset(0, -4000), 3000);
     await tester.pumpAndSettle();
     expect(find.text('专辑节目35'), findsOneWidget);
+    await tester.tap(find.byTooltip('返回专辑列表'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('资讯热点'), findsOneWidget);
+    expect(tester.getTopLeft(find.byTooltip('返回专辑列表')).dx, greaterThan(8));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('返回专辑列表'), findsNothing);
+    expect(find.text('资讯热点'), findsOneWidget);
   });
 
   testWidgets('queue sheet switches tabs while playback is paused', (tester) async {
@@ -258,5 +270,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.favorite), findsOneWidget);
     expect(find.byTooltip('取消收藏 资讯充电站'), findsOneWidget);
+  });
+
+  testWidgets('hides mini player while splash is showing', (tester) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final player = RadioPlayer(skipAudio: true);
+    player.restore(
+      queue: [
+        Episode(
+          id: 11,
+          title: '早间新闻',
+          albumId: 5,
+          albumName: '资讯充电站',
+          albumPic: '',
+          host: '',
+          durationMs: 60000,
+          onlineTime: nowMs,
+          audioUrl: 'https://cdn.example/a.m4a',
+        ),
+      ],
+      index: 0,
+      history: const [],
+    );
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: _catalogOnlyClient(nowMs)), player: player));
+    expect(find.byTooltip('打开播放列表'), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('打开播放列表'), findsOneWidget);
   });
 }
