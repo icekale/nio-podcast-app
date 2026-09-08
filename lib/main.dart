@@ -12,6 +12,7 @@ Future<void> main() async {
     await JustAudioBackground.init(
       androidNotificationChannelId: 'top.k4le.nio_radio.playback',
       androidNotificationChannelName: 'NIO Radio 播放',
+      androidNotificationIcon: 'drawable/ic_stat_nio',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
     );

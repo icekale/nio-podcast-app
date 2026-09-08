@@ -198,7 +198,7 @@ class RadioPlayer extends ChangeNotifier {
     if (skipAudio) return;
     try {
       if (reload || !_loaded) {
-        await engine.setUrl(current!.audioUrl, tag: _mediaItem(current!));
+        await engine.setAudioSource(AudioSource.uri(Uri.parse(current!.audioUrl), tag: _mediaItem(current!)));
         if (!reload && position > Duration.zero) await engine.seek(position);
         _loaded = true;
       }
@@ -216,7 +216,9 @@ class RadioPlayer extends ChangeNotifier {
       id: '${episode.id}',
       title: episode.title,
       album: episode.albumName.isEmpty ? 'NIO Radio' : episode.albumName,
+      artist: episode.host.isEmpty ? 'NIO Radio' : episode.host,
       artUri: episode.albumPic.isNotEmpty ? Uri.parse(episode.albumPic) : null,
+      duration: episode.durationMs > 0 ? Duration(milliseconds: episode.durationMs) : null,
     );
   }
 
