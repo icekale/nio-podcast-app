@@ -13,9 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # actions/checkout v4.4.0
-      - uses: 11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       # subosito/flutter-action v2.23.0
-      - uses: 1a449444c387b1966244ae4d4f8c696479add0b2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           cache: true
@@ -35,7 +35,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - run: mv build/app/outputs/flutter-apk/app-release.apk NIO-Radio.apk
       # actions/upload-artifact v4.6.2
-      - uses: ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: NIO-Radio
           path: NIO-Radio.apk
