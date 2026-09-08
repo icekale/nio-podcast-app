@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'catalog.dart';
 import 'covers.dart';
 import 'format.dart';
 import 'player.dart';
+import 'store.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -25,6 +27,7 @@ class RadioApp extends StatefulWidget {
 
 class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin {
   AppScreen _screen = AppScreen.home;
+  AppScreen? _albumReturn;
   Album? _album;
   String _searchQuery = '';
   Catalog? _catalog;
@@ -35,9 +38,15 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
   var _stale = false;
   final _favoriteIds = <int>[];
   final _later = <Episode>[];
+  SharedPreferences? _prefs;
+  int? _savedEpisodeId;
+  var _savedQueueLength = -1;
+  var _savedHistoryLength = -1;
+  var _savedPositionBucket = -1;
   String _queueTab = 'queue';
   Timer? _sleep;
   String? _sleepLabel;
+  AppLifecycleListener? _lifecycle;
   late final AnimationController _pageSlide;
   late final Animation<Offset> _pageOffset;
   final _navTick = ValueNotifier(0);
@@ -58,7 +67,10 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
         _navTick.value++;
       }
     });
+    _lifecycle = AppLifecycleListener(onPause: _persistPlayback);
+    widget.player.addListener(_persistPlayback);
     _load();
+    unawaited(_restore());
   }
 
   @override
@@ -66,10 +78,56 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
     _pageSlide.dispose();
     _navTick.dispose();
     _sleep?.cancel();
+    widget.player.removeListener(_persistPlayback);
+    _lifecycle?.dispose();
     super.dispose();
   }
 
-  Future<void> _load({bool force = false}) async {
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    _prefs = prefs;
+    final playback = loadPlayback(prefs);
+    setState(() {
+      _favoriteIds.addAll(loadFavorites(prefs));
+      _later.addAll(loadLater(prefs));
+    });
+    widget.player.restore(
+      queue: playback?.queue ?? const [],
+      index: playback?.index ?? -1,
+      history: loadHistory(prefs),
+      position: playback?.position ?? Duration.zero,
+      duration: playback?.duration ?? Duration.zero,
+    );
+  }
+
+  void _persistPlayback() {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final player = widget.player;
+    final episodeId = player.current?.id;
+    final queueLength = player.queue.length;
+    final positionBucket = player.position.inSeconds ~/ 5;
+    if (player.history.length != _savedHistoryLength) {
+      _savedHistoryLength = player.history.length;
+      unawaited(saveHistory(prefs, player.history));
+    }
+    if (episodeId == _savedEpisodeId && queueLength == _savedQueueLength && positionBucket == _savedPositionBucket) {
+      return;
+    }
+    _savedEpisodeId = episodeId;
+    _savedQueueLength = queueLength;
+    _savedPositionBucket = positionBucket;
+    unawaited(savePlayback(
+      prefs,
+      queue: player.queue,
+      index: player.index,
+      positionMs: player.position.inMilliseconds,
+      durationMs: player.duration.inMilliseconds,
+    ));
+  }
+
+  Future<void> _load() async {
     setState(() {
       if (_catalog == null) {
         _loading = true;
@@ -111,6 +169,7 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
 
   void _go(AppScreen screen, {Album? album, String? query}) {
     final fromHome = _screen == AppScreen.home;
+    if (screen == AppScreen.album) _albumReturn = _screen;
     _screen = screen;
     if (album != null) _album = album;
     if (query != null) _searchQuery = query;
@@ -120,7 +179,7 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
 
   void _back() {
     if (_screen == AppScreen.album) {
-      _screen = AppScreen.albums;
+      _screen = _albumReturn ?? AppScreen.albums;
       _navTick.value++;
       return;
     }
@@ -144,6 +203,8 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
         _favoriteIds.insert(0, albumId);
       }
     });
+    final prefs = _prefs;
+    if (prefs != null) unawaited(saveFavorites(prefs, _favoriteIds));
   }
 
   LaterAddResult _addLater(Episode episode) {
@@ -154,7 +215,17 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
       return LaterAddResult(added: false, reason: 'limit', items: _later);
     }
     setState(() => _later.add(episode));
+    final prefs = _prefs;
+    if (prefs != null) unawaited(saveLater(prefs, _later));
     return LaterAddResult(added: true, items: _later);
+  }
+
+  void _removeLater(int episodeId) {
+    final before = _later.length;
+    _later.removeWhere((item) => item.id == episodeId);
+    if (_later.length == before) return;
+    final prefs = _prefs;
+    if (prefs != null) unawaited(saveLater(prefs, _later));
   }
 
   void _setSleep(int? minutes, {bool episodeEnd = false}) {
@@ -194,7 +265,7 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
               onPlayLater: (episode) => _play(episode, _later),
               onRemove: widget.player.removeFromQueue,
               onPlayNext: widget.player.playNext,
-              onRemoveLater: (id) => setState(() => _later.removeWhere((item) => item.id == id)),
+              onRemoveLater: _removeLater,
               onSleepMinutes: (minutes) => _setSleep(minutes),
               onSleepEpisodeEnd: () => _setSleep(null, episodeEnd: true),
               onClearSleep: () => _setSleep(null),
@@ -277,7 +348,7 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
           children: [
             Text('$_error', textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            TextButton(onPressed: () => _load(force: true), child: const Text('刷新目录')),
+            TextButton(onPressed: _load, child: const Text('刷新目录')),
           ],
         ),
       );
@@ -295,7 +366,7 @@ class _RadioAppState extends State<RadioApp> with SingleTickerProviderStateMixin
             stale: _stale,
             refreshing: _refreshing,
             error: _error,
-            onRetry: () => _load(force: true),
+            onRetry: _load,
             onPlay: (episode) => _play(episode, _home!.episodes),
             onPlayAll: () {
               if (_home!.episodes.isEmpty) return;
@@ -1084,7 +1155,7 @@ class MiniPlayerBar extends StatelessWidget {
   }
 }
 
-class QueueSheet extends StatelessWidget {
+class QueueSheet extends StatefulWidget {
   const QueueSheet({
     super.key,
     required this.player,
@@ -1111,7 +1182,7 @@ class QueueSheet extends StatelessWidget {
   final ValueChanged<Episode> onPlay;
   final ValueChanged<Episode> onPlayLater;
   final Future<void> Function(int id) onRemove;
-  final Future<void> Function(Episode episode) onPlayNext;
+  final ValueChanged<Episode> onPlayNext;
   final ValueChanged<int> onRemoveLater;
   final ValueChanged<int> onSleepMinutes;
   final VoidCallback onSleepEpisodeEnd;
@@ -1119,7 +1190,22 @@ class QueueSheet extends StatelessWidget {
   final VoidCallback onClose;
 
   @override
+  State<QueueSheet> createState() => _QueueSheetState();
+}
+
+/// Owns tab/later/sleep state locally: the parent's setState cannot rebuild this
+/// modal route, and the player's notifications are too coarse (none while paused).
+class _QueueSheetState extends State<QueueSheet> {
+  late String _tab = widget.tab;
+  late final List<Episode> _later = List.of(widget.later);
+  late String? _sleepLabel = widget.sleepLabel;
+
+  @override
   Widget build(BuildContext context) {
+    final player = widget.player;
+    final later = _later;
+    final tab = _tab;
+    final sleepLabel = _sleepLabel;
     final palette = NioPalette(Theme.of(context).brightness);
     final items = tab == 'history'
         ? player.history
@@ -1150,12 +1236,21 @@ class QueueSheet extends StatelessWidget {
                       tooltip: '睡眠定时',
                       icon: Icon(Icons.timer_outlined, color: sleepLabel != null ? palette.tealDark : palette.ink),
                       onSelected: (value) {
+                        setState(() {
+                          if (value == 'end') {
+                            _sleepLabel = '本集结束';
+                          } else if (value == 'off') {
+                            _sleepLabel = null;
+                          } else {
+                            _sleepLabel = '$value 分钟';
+                          }
+                        });
                         if (value == 'end') {
-                          onSleepEpisodeEnd();
+                          widget.onSleepEpisodeEnd();
                         } else if (value == 'off') {
-                          onClearSleep();
+                          widget.onClearSleep();
                         } else {
-                          onSleepMinutes(int.parse(value));
+                          widget.onSleepMinutes(int.parse(value));
                         }
                       },
                       itemBuilder: (context) => [
@@ -1164,14 +1259,14 @@ class QueueSheet extends StatelessWidget {
                         if (sleepLabel != null) const PopupMenuItem(value: 'off', child: Text('关闭定时')),
                       ],
                     ),
-                    IconButton(tooltip: '收起播放列表', onPressed: onClose, icon: const Icon(Icons.close)),
+                    IconButton(tooltip: '收起播放列表', onPressed: widget.onClose, icon: const Icon(Icons.close)),
                   ],
                 ),
                 Row(
                   children: [
-                    _tab(context, 'queue', '播放列表', player.queue.length),
-                    _tab(context, 'history', '最近听过', player.history.length),
-                    _tab(context, 'later', '稍后播放', later.length),
+                    _tabButton(context, 'queue', '播放列表', player.queue.length),
+                    _tabButton(context, 'history', '最近听过', player.history.length),
+                    _tabButton(context, 'later', '稍后播放', later.length),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -1204,8 +1299,8 @@ class QueueSheet extends StatelessWidget {
                                       ? PopupMenuButton<String>(
                                           tooltip: '管理 ${episode.title}',
                                           onSelected: (value) {
-                                            if (value == 'next') onPlayNext(episode);
-                                            if (value == 'remove') onRemove(episode.id);
+                                            if (value == 'next') widget.onPlayNext(episode);
+                                            if (value == 'remove') widget.onRemove(episode.id);
                                           },
                                           itemBuilder: (context) => const [
                                             PopupMenuItem(value: 'next', child: Text('下一首播放')),
@@ -1213,9 +1308,16 @@ class QueueSheet extends StatelessWidget {
                                           ],
                                         )
                                       : tab == 'later'
-                                          ? IconButton(tooltip: '移出稍后播放', onPressed: () => onRemoveLater(episode.id), icon: const Icon(Icons.delete_outline))
+                                          ? IconButton(
+                                              tooltip: '移出稍后播放',
+                                              onPressed: () {
+                                                setState(() => _later.removeWhere((item) => item.id == episode.id));
+                                                widget.onRemoveLater(episode.id);
+                                              },
+                                              icon: const Icon(Icons.delete_outline),
+                                            )
                                           : null,
-                              onTap: () => tab == 'later' ? onPlayLater(episode) : onPlay(episode),
+                              onTap: () => tab == 'later' ? widget.onPlayLater(episode) : widget.onPlay(episode),
                             );
                           },
                         ),
@@ -1228,12 +1330,15 @@ class QueueSheet extends StatelessWidget {
     );
   }
 
-  Widget _tab(BuildContext context, String id, String label, int count) {
+  Widget _tabButton(BuildContext context, String id, String label, int count) {
     final palette = NioPalette(Theme.of(context).brightness);
-    final selected = tab == id;
+    final selected = _tab == id;
     return Expanded(
       child: TextButton(
-        onPressed: () => onTab(id),
+        onPressed: () {
+          setState(() => _tab = id);
+          widget.onTab(id);
+        },
         child: Text(
           '$label $count',
           style: TextStyle(color: selected ? palette.ink : palette.muted, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),

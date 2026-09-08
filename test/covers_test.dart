@@ -39,4 +39,25 @@ void main() {
     await CoverStore.ensure(album.imageUrl);
     expect(hits, 1);
   });
+
+  test('prefetch trims cache down to maxFiles', () async {
+    CoverStore.maxFiles = 3;
+    CoverStore.client = MockClient((request) async => http.Response.bytes([1, 2, 3, 4], 200));
+    for (var i = 0; i < 5; i++) {
+      File('${dir.path}/old$i').writeAsStringSync('x');
+    }
+    final cover = Album(
+      id: 5,
+      name: '资讯充电站',
+      imageUrl: 'https://cdn.example/cover.jpg',
+      category: 'news',
+      evergreen: false,
+    );
+    await CoverStore.prefetch([cover]);
+    expect(CoverStore.lookup(cover.imageUrl), isNotNull);
+    await CoverStore.prefetch([cover]);
+    final remaining = dir.listSync().whereType<File>().length;
+    expect(remaining, CoverStore.maxFiles);
+    expect(CoverStore.lookup(cover.imageUrl), isNotNull);
+  });
 }

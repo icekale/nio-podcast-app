@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 import 'api.dart';
 import 'player.dart';
 import 'screens.dart';
 import 'theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'top.k4le.nio_radio.playback',
+      androidNotificationChannelName: 'NIO Radio 播放',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+    );
+  } catch (_) {
+    // 后台播放初始化失败时退回前台播放，不让 App 卡在启动页。
+  }
   runApp(NioRadioApp(api: NioApi(), player: RadioPlayer()));
 }
 

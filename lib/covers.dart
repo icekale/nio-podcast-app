@@ -8,6 +8,8 @@ class CoverStore {
   static Directory? overrideDir;
   static http.Client? client;
   static final _inflight = <String, Future<File?>>{};
+  /// ponytail: cap is a file count, not bytes — cheap trim, upgrade to LRU-by-bytes if covers grow past ~50MB.
+  static var maxFiles = 3000;
 
   static Directory get directory {
     final dir = overrideDir ?? Directory('${Directory.systemTemp.path}/nio_covers');
@@ -42,7 +44,19 @@ class CoverStore {
     });
   }
 
+  static void _trimExcess() {
+    final files = directory.listSync().whereType<File>().toList();
+    if (files.length <= maxFiles) return;
+    files.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+    for (final file in files.take(files.length - maxFiles)) {
+      try {
+        file.deleteSync();
+      } catch (_) {}
+    }
+  }
+
   static Future<void> prefetch(Iterable<Album> albums) async {
+    _trimExcess();
     final urls = <String>[
       for (final album in albums) ...[
         if (album.imageUrl.isNotEmpty) album.imageUrl,

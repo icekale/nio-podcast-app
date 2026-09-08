@@ -7,8 +7,45 @@ import 'package:http/testing.dart';
 import 'package:nio_radio/api.dart';
 import 'package:nio_radio/main.dart';
 import 'package:nio_radio/player.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+http.Client _catalogOnlyClient(int nowMs) {
+  return MockClient((request) async {
+    if (request.url.toString() == daytimeUrl) {
+      return http.Response(jsonEncode({'result': []}), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+    }
+    return http.Response(
+      jsonEncode({
+        'generatedAt': nowMs,
+        'albums': [
+          {
+            'id': 5,
+            'name': '资讯充电站',
+            'imageUrl': '',
+            'category': 'news',
+            'latestEpisode': {
+              'id': 11,
+              'title': '早间新闻',
+              'albumId': 5,
+              'albumName': '资讯充电站',
+              'albumPic': '',
+              'host': '',
+              'duration': 60000,
+              'onlineTime': nowMs,
+              'audioUrl': 'https://cdn.example/a.m4a',
+            },
+          },
+        ],
+      }),
+      200,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );
+  });
+}
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets('home matches web copy and plays into mini player', (tester) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final client = MockClient((request) async {
@@ -179,5 +216,47 @@ void main() {
     await tester.fling(find.byType(ListView), const Offset(0, -4000), 3000);
     await tester.pumpAndSettle();
     expect(find.text('专辑节目35'), findsOneWidget);
+  });
+
+  testWidgets('queue sheet switches tabs while playback is paused', (tester) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final player = RadioPlayer(skipAudio: true);
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: _catalogOnlyClient(nowMs)), player: player));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('全部播放'));
+    await tester.pumpAndSettle();
+    expect(player.current?.id, 11);
+    await tester.tap(find.byTooltip('打开播放列表'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.music_note), findsOneWidget);
+
+    await tester.tap(find.text('最近听过 1'));
+    await tester.pump();
+    expect(find.byIcon(Icons.music_note), findsNothing);
+    expect(find.text('播放列表是空的'), findsNothing);
+  });
+
+  testWidgets('favorites survive an app restart', (tester) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: _catalogOnlyClient(nowMs)), player: RadioPlayer(skipAudio: true)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('全部专辑'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.favorite), findsNothing);
+    await tester.ensureVisible(find.byTooltip('收藏 资讯充电站'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('收藏 资讯充电站'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.favorite), findsOneWidget);
+
+    // Simulate a process restart: unmount the app so state is disposed, then remount.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: _catalogOnlyClient(nowMs)), player: RadioPlayer(skipAudio: true)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('全部专辑'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    expect(find.byTooltip('取消收藏 资讯充电站'), findsOneWidget);
   });
 }

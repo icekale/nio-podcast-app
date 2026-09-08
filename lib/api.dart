@@ -40,6 +40,34 @@ class Episode {
   final int onlineTime;
   final String audioUrl;
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'albumId': albumId,
+    'albumName': albumName,
+    'albumPic': albumPic,
+    'albumPicDark': albumPicDark,
+    'host': host,
+    'durationMs': durationMs,
+    'onlineTime': onlineTime,
+    'audioUrl': audioUrl,
+  };
+
+  factory Episode.fromJson(Map<String, dynamic> json) {
+    return Episode(
+      id: _asInt(json['id']),
+      title: (json['title'] as String?) ?? '',
+      albumId: _asInt(json['albumId']),
+      albumName: (json['albumName'] as String?) ?? '',
+      albumPic: (json['albumPic'] as String?) ?? '',
+      albumPicDark: (json['albumPicDark'] as String?) ?? '',
+      host: (json['host'] as String?) ?? '',
+      durationMs: _asInt(json['durationMs']),
+      onlineTime: _asInt(json['onlineTime']),
+      audioUrl: (json['audioUrl'] as String?) ?? '',
+    );
+  }
+
   factory Episode.fromCatalog(Map<String, dynamic> json) {
     return Episode(
       id: _asInt(json['id']),
