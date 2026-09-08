@@ -12,22 +12,35 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      # actions/checkout v4.4.0
+      - uses: 11d5960a326750d5838078e36cf38b85af677262
+      # subosito/flutter-action v2.23.0
+      - uses: 1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           cache: true
+      - name: Resolve version from pubspec
+        run: echo "VERSION=$(sed -n 's/^version: //p' pubspec.yaml | cut -d+ -f1)" >> "$GITHUB_ENV"
+      - name: Decode release keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > /tmp/release.jks
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && '/tmp/release.jks' || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - run: mv build/app/outputs/flutter-apk/app-release.apk NIO-Radio.apk
-      - uses: actions/upload-artifact@v4
+      # actions/upload-artifact v4.6.2
+      - uses: ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: NIO-Radio
           path: NIO-Radio.apk
       - env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view v1.0.0 >/dev/null 2>&1 || gh release create v1.0.0 --title v1.0.0 --notes "NIO Radio Flutter Android APK"
-          gh release upload v1.0.0 NIO-Radio.apk --clobber
+          gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --title "v$VERSION" --notes "NIO Radio Flutter Android APK"
+          gh release upload "v$VERSION" NIO-Radio.apk --clobber
