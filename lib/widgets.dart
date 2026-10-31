@@ -341,34 +341,41 @@ class AlbumRow extends StatelessWidget {
         ? null
         : FavoriteButton(favorited: favorited, name: album.name, onPressed: toggle);
     if (grid) {
-      return Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          InkWell(
-            onTap: onOpen,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Artwork(src: album.imageUrl, darkSrc: album.imageUrlDark, radius: 8),
+      // 对齐 web `.album-results.is-grid .album-action` 的
+      // `top: calc(100cqw + var(--space-3))`：心形贴封面底边再加 12px 间距。
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final coverSide = constraints.maxWidth;
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              InkWell(
+                onTap: onOpen,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 1,
+                      child: Artwork(src: album.imageUrl, darkSrc: album.imageUrlDark, radius: 8),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 48),
+                      child: Text(album.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 48),
+                      child: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: palette.muted, fontSize: 13)),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.only(right: 48),
-                  child: Text(album.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.only(right: 48),
-                  child: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: palette.muted, fontSize: 13)),
-                ),
-              ],
-            ),
-          ),
-          if (heart != null) Positioned(right: 0, bottom: 0, child: heart),
-        ],
+              ),
+              if (heart != null) Positioned(right: 0, top: coverSide + 12, child: heart),
+            ],
+          );
+        },
       );
     }
     return Container(

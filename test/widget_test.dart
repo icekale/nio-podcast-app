@@ -8,6 +8,7 @@ import 'package:nio_radio/api.dart';
 import 'package:nio_radio/main.dart';
 import 'package:nio_radio/player.dart';
 import 'package:nio_radio/theme.dart';
+import 'package:nio_radio/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 http.Client _catalogOnlyClient(int nowMs) {
@@ -358,5 +359,61 @@ void main() {
     expect(find.byTooltip('打开播放列表'), findsNothing);
     await tester.pumpAndSettle();
     expect(find.byTooltip('打开播放列表'), findsOneWidget);
+  });
+
+  testWidgets('grid hearts stay level when one subtitle wraps to two lines', (tester) async {
+    Album album(int id, String name, String subtitle) => Album(
+          id: id,
+          name: name,
+          imageUrl: '',
+          directorySubtitle: subtitle,
+          evergreen: false,
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: nioTheme(Brightness.light),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: 360,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: AlbumRow(
+                      album: album(1, '前方加速度', '今天'),
+                      grid: true,
+                      favorited: true,
+                      onOpen: () {},
+                      onToggleFavorite: () {},
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: AlbumRow(
+                      album: album(2, '果壳时间', '这是一段会折成两行的很长副标题，用来拉开卡片高度，确认心形仍对齐封面底边。' * 2),
+                      grid: true,
+                      onOpen: () {},
+                      onToggleFavorite: () {},
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final shortCard = tester.getSize(find.byType(AlbumRow).at(0));
+    final longCard = tester.getSize(find.byType(AlbumRow).at(1));
+    expect(longCard.height, greaterThan(shortCard.height + 8));
+
+    final shortHeart = tester.getTopLeft(find.byTooltip('取消收藏 前方加速度'));
+    final longHeart = tester.getTopLeft(find.byTooltip('收藏 果壳时间'));
+    expect((shortHeart.dy - longHeart.dy).abs(), lessThan(1));
   });
 }
