@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'api.dart';
+import 'custom_albums.dart';
 
 class RadioPlayer extends ChangeNotifier {
   RadioPlayer({this.audio, this.skipAudio = false}) {
@@ -27,6 +28,8 @@ class RadioPlayer extends ChangeNotifier {
       });
       _completeSub = engine.processingStateStream.listen((state) {
         if (state != ProcessingState.completed) return;
+        // loop-one tracks are handled by LoopMode.one; never auto-advance.
+        if (isLoopingEpisode(current)) return;
         if (stopAfterEpisode) {
           stopAfterEpisode = false;
           playing = false;
@@ -111,6 +114,8 @@ class RadioPlayer extends ChangeNotifier {
     position = Duration.zero;
     duration = Duration.zero;
     _loaded = false;
+    // Web clears episode-end sleep when starting a loop-one track.
+    if (isLoopingEpisode(current)) stopAfterEpisode = false;
     error = playing ? null : '该节目没有可播放音频，请稍后重试';
     history = [
       current!,
@@ -199,8 +204,11 @@ class RadioPlayer extends ChangeNotifier {
     try {
       if (reload || !_loaded) {
         await engine.setAudioSource(AudioSource.uri(Uri.parse(current!.audioUrl), tag: _mediaItem(current!)));
+        await engine.setLoopMode(isLoopingEpisode(current) ? LoopMode.one : LoopMode.off);
         if (!reload && position > Duration.zero) await engine.seek(position);
         _loaded = true;
+      } else {
+        await engine.setLoopMode(isLoopingEpisode(current) ? LoopMode.one : LoopMode.off);
       }
       await engine.play();
     } catch (_) {
@@ -212,14 +220,25 @@ class RadioPlayer extends ChangeNotifier {
   }
 
   MediaItem _mediaItem(Episode episode) {
+    final art = _notificationArtUri(episode);
     return MediaItem(
       id: '${episode.id}',
       title: episode.title,
       album: episode.albumName.isEmpty ? 'NIO Radio' : episode.albumName,
       artist: episode.host.isEmpty ? 'NIO Radio' : episode.host,
-      artUri: episode.albumPic.isNotEmpty ? Uri.parse(episode.albumPic) : null,
+      artUri: art,
       duration: episode.durationMs > 0 ? Duration(milliseconds: episode.durationMs) : null,
     );
+  }
+
+  Uri? _notificationArtUri(Episode episode) {
+    final pic = episode.albumPic;
+    if (pic.isEmpty) return null;
+    if (pic.startsWith('asset:')) {
+      // Lock-screen art needs an http(s) URI; bundled covers also live on the web CDN.
+      return Uri.parse(whiteNoiseCoverLightUrl);
+    }
+    return Uri.parse(pic);
   }
 
   Future<void> _step(int direction) async {
