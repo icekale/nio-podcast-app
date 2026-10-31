@@ -39,6 +39,25 @@ void main() {
     expect(playback.queue.map((e) => e.id), [11, 12]);
   });
 
+  test('albums seen watermark round-trips and treats non-positive values as never visited', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(loadAlbumsSeenAt(prefs), 0);
+
+    await saveAlbumsSeenAt(prefs, 1735660800000);
+    expect(prefs.getInt('albums_seen_at'), 1735660800000);
+    expect(loadAlbumsSeenAt(prefs), 1735660800000);
+
+    await saveAlbumsSeenAt(prefs, 0);
+    expect(loadAlbumsSeenAt(prefs), 0);
+    await saveAlbumsSeenAt(prefs, -5);
+    expect(loadAlbumsSeenAt(prefs), 0);
+
+    await prefs.setString('albums_seen_at', 'not-a-number');
+    expect(loadAlbumsSeenAt(prefs), 0);
+  });
+
   test('loadPlayback rejects empty queue and out-of-range index', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();

@@ -38,6 +38,11 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
   var _stale = false;
   final _favoriteIds = <int>[];
   final _later = <Episode>[];
+  var _albumsSeenAt = 0;
+  var _favoritesSeenAt = 0;
+  var _seenHydrated = false;
+  var _leftFavoritesBeforeHydrate = false;
+  int? _pendingSeenWrite;
   SharedPreferences? _prefs;
   int? _savedEpisodeId;
   var _savedQueueLength = -1;
@@ -89,9 +94,20 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
     if (!mounted) return;
     _prefs = prefs;
     final playback = loadPlayback(prefs);
+    final storedSeenAt = loadAlbumsSeenAt(prefs);
+    final pendingSeenWrite = _pendingSeenWrite;
+    if (pendingSeenWrite != null) {
+      unawaited(saveAlbumsSeenAt(prefs, pendingSeenWrite));
+      _pendingSeenWrite = null;
+    }
     setState(() {
       _favoriteIds.addAll(loadFavorites(prefs));
       _later.addAll(loadLater(prefs));
+      if (!_leftFavoritesBeforeHydrate) {
+        _albumsSeenAt = storedSeenAt;
+        if (_screen == AppScreen.favorites) _favoritesSeenAt = storedSeenAt;
+      }
+      _seenHydrated = true;
     });
     widget.player.restore(
       queue: playback?.queue ?? const [],
@@ -180,6 +196,7 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
       );
 
   void _go(AppScreen screen, {Album? album, String? query}) {
+    final previous = _screen;
     if (screen == AppScreen.album) {
       if (_screen != AppScreen.album) _albumReturn = _screen;
       _screen = AppScreen.album;
@@ -187,31 +204,75 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
       _coverTick.value++;
       if (_pageSlide.isDismissed) _pageSlide.forward();
       _coverSlide.forward();
+      _syncFavoritesWatermark(previous, _screen);
+      setState(() {});
       return;
     }
     final fromHome = _screen == AppScreen.home || _pageSlide.isDismissed;
     _screen = screen;
     if (query != null) _searchQuery = query;
+    _syncFavoritesWatermark(previous, _screen);
     _navTick.value++;
     if (fromHome) _pageSlide.forward();
+    setState(() {});
   }
 
   void _back() {
     if (_screen == AppScreen.album) {
+      final previous = _screen;
       _coverSlide.reverse().whenComplete(() {
         if (!mounted || _coverSlide.isAnimating) return;
-        _screen = _albumReturn ?? AppScreen.albums;
+        final next = _albumReturn ?? AppScreen.albums;
+        _screen = next;
         _album = null;
         _coverTick.value++;
+        _syncFavoritesWatermark(previous, next);
+        setState(() {});
       });
       return;
     }
     if (_screen == AppScreen.home) return;
+    final previous = _screen;
+    if (previous == AppScreen.favorites) {
+      _syncFavoritesWatermark(previous, AppScreen.home);
+      setState(() {});
+    }
     _pageSlide.reverse().whenComplete(() {
       if (!mounted || _pageSlide.isAnimating) return;
       _screen = AppScreen.home;
       _navTick.value++;
+      if (previous != AppScreen.favorites) setState(() {});
     });
+  }
+
+  // 对齐 web App.jsx：进收藏页立刻把水位落盘，离开时才推进内存水位以清角标。
+  // 「有更新」用进入当次的水位，所以从收藏打开专辑再返回时分区保持不变。
+  void _syncFavoritesWatermark(AppScreen from, AppScreen to) {
+    final entering = to == AppScreen.favorites && from != AppScreen.favorites;
+    final leaving = from == AppScreen.favorites && to != AppScreen.favorites;
+    if (entering) {
+      final returningFromAlbum = from == AppScreen.album && _albumReturn == AppScreen.favorites;
+      if (!returningFromAlbum) _favoritesSeenAt = _albumsSeenAt;
+      _persistAlbumsSeen(DateTime.now().millisecondsSinceEpoch);
+    }
+    if (leaving) {
+      _albumsSeenAt = DateTime.now().millisecondsSinceEpoch;
+      if (!_seenHydrated) _leftFavoritesBeforeHydrate = true;
+    }
+  }
+
+  void _persistAlbumsSeen(int timestamp) {
+    final prefs = _prefs;
+    if (prefs == null) {
+      _pendingSeenWrite = timestamp;
+      return;
+    }
+    unawaited(saveAlbumsSeenAt(prefs, timestamp));
+  }
+
+  int get _visibleUpdatesCount {
+    if (_screen == AppScreen.favorites || _catalog == null) return 0;
+    return selectUpdatedAlbums(_catalog!.albums, _favoriteIds, _albumsSeenAt).length;
   }
 
   Future<void> _play(Episode episode, [List<Episode>? queue]) {
@@ -417,7 +478,8 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
             onResume: () {
               if (!widget.player.playing) widget.player.toggle();
             },
-            onSearch: () => _go(AppScreen.search),
+            updatesCount: _visibleUpdatesCount,
+            onOpenFavorites: () => _go(AppScreen.favorites),
             onOpenAlbums: () => _go(AppScreen.albums),
           ),
           ),
@@ -489,6 +551,7 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
       return FavoritesView(
         catalog: catalog,
         favoriteIds: _favoriteIds,
+        updatedAlbums: selectUpdatedAlbums(catalog.albums, _favoriteIds, _favoritesSeenAt),
         onBack: _back,
         onBrowse: () => _go(AppScreen.albums),
         onOpenAlbum: (album) => _go(AppScreen.album, album: album),
@@ -538,7 +601,8 @@ class HomeScreen extends StatefulWidget {
     required this.onPlay,
     required this.onPlayAll,
     required this.onResume,
-    required this.onSearch,
+    required this.updatesCount,
+    required this.onOpenFavorites,
     required this.onOpenAlbums,
   });
 
@@ -551,7 +615,8 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<Episode> onPlay;
   final VoidCallback onPlayAll;
   final VoidCallback onResume;
-  final VoidCallback onSearch;
+  final int updatesCount;
+  final VoidCallback onOpenFavorites;
   final VoidCallback onOpenAlbums;
 
   @override
@@ -612,7 +677,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   if (_scrolled && widget.player.current != null)
                     TextButton(onPressed: widget.onResume, child: const Text('▶ 继续播放')),
-                  IconCircleButton(icon: Icons.search, tooltip: '搜索', onPressed: widget.onSearch),
+                  IconCircleButton(
+                    icon: Icons.favorite_border,
+                    tooltip: '专辑收藏',
+                    size: 22,
+                    showBadge: widget.updatesCount > 0,
+                    onPressed: widget.onOpenFavorites,
+                  ),
                 ],
               ),
             ),
@@ -970,6 +1041,7 @@ class FavoritesView extends StatelessWidget {
     super.key,
     required this.catalog,
     required this.favoriteIds,
+    required this.updatedAlbums,
     required this.onBack,
     required this.onBrowse,
     required this.onOpenAlbum,
@@ -978,6 +1050,7 @@ class FavoritesView extends StatelessWidget {
 
   final Catalog catalog;
   final List<int> favoriteIds;
+  final List<Album> updatedAlbums;
   final VoidCallback onBack;
   final VoidCallback onBrowse;
   final ValueChanged<Album> onOpenAlbum;
@@ -999,16 +1072,38 @@ class FavoritesView extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 32, 20, 160),
             children: [
               SectionHeading(title: '专辑收藏', count: favorites.length),
+              if (updatedAlbums.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: palette.line))),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SectionHeading(title: '有更新', count: updatedAlbums.length, titleColor: palette.tealDark),
+                      AlbumGrid(
+                        albums: updatedAlbums,
+                        favoriteIds: favoriteIds,
+                        onOpenAlbum: onOpenAlbum,
+                        onToggleFavorite: onToggleFavorite,
+                      ),
+                    ],
+                  ),
+                ),
               if (favorites.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 48),
                   child: Column(
                     children: [
-                      Icon(Icons.favorite_border, size: 32, color: palette.muted),
+                      Icon(Icons.favorite_border, size: 32, color: palette.tealDark),
                       const SizedBox(height: 12),
                       const Text('还没有收藏专辑', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
-                      Text('在「全部专辑」里点击专辑标题右侧的 ☆ 即可收藏。', textAlign: TextAlign.center, style: TextStyle(color: palette.mutedStrong)),
+                      Text(
+                        '在「全部专辑」里点击专辑标题右侧的 ☆ 即可订阅，之后这里会显示有更新的专辑。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: palette.mutedStrong, fontSize: 14),
+                      ),
                       const SizedBox(height: 16),
                       TextButton(onPressed: onBrowse, child: const Text('去全部专辑看看')),
                     ],

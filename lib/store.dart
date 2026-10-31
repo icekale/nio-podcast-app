@@ -8,12 +8,27 @@ const _favoritesKey = 'favorites';
 const _laterKey = 'later';
 const _historyKey = 'history';
 const _playbackKey = 'playback';
+const _albumsSeenAtKey = 'albums_seen_at';
 
 List<int> loadFavorites(SharedPreferences prefs) =>
     (prefs.getStringList(_favoritesKey) ?? const []).map(int.parse).toList();
 
 Future<void> saveFavorites(SharedPreferences prefs, List<int> ids) =>
     prefs.setStringList(_favoritesKey, [for (final id in ids) '$id']);
+
+/// 上次查看「专辑收藏」的时间（毫秒）。0 表示从未打开过。
+int loadAlbumsSeenAt(SharedPreferences prefs) {
+  try {
+    final value = prefs.getInt(_albumsSeenAtKey);
+    if (value == null || value <= 0) return 0;
+    return value;
+  } catch (_) {
+    return 0;
+  }
+}
+
+Future<void> saveAlbumsSeenAt(SharedPreferences prefs, int timestamp) =>
+    prefs.setInt(_albumsSeenAtKey, timestamp > 0 ? timestamp : 0);
 
 List<Episode> loadLater(SharedPreferences prefs) => _loadEpisodes(prefs, _laterKey);
 
