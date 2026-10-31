@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+
 const catalogUrl = 'https://nio.k4le.top/data/albums.json';
 const albumListUrl = 'https://gateway-front-external.nio.com/moat/100914/v2/audio/list';
 const daytimeUrl = 'https://gateway-front-external.nio.com/moat/100914/v3/radio/list?pageSize=87';
@@ -27,6 +28,7 @@ class Episode {
     required this.durationMs,
     required this.onlineTime,
     required this.audioUrl,
+    this.playbackMode = '',
   });
 
   final int id;
@@ -39,6 +41,8 @@ class Episode {
   final int durationMs;
   final int onlineTime;
   final String audioUrl;
+  /// Web-compatible playback hint; `loop-one` means single-track loop.
+  final String playbackMode;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -51,6 +55,7 @@ class Episode {
     'durationMs': durationMs,
     'onlineTime': onlineTime,
     'audioUrl': audioUrl,
+    if (playbackMode.isNotEmpty) 'playbackMode': playbackMode,
   };
 
   factory Episode.fromJson(Map<String, dynamic> json) {
@@ -65,6 +70,7 @@ class Episode {
       durationMs: _asInt(json['durationMs']),
       onlineTime: _asInt(json['onlineTime']),
       audioUrl: (json['audioUrl'] as String?) ?? '',
+      playbackMode: (json['playbackMode'] as String?) ?? '',
     );
   }
 
@@ -80,6 +86,7 @@ class Episode {
       durationMs: _asInt(json['duration']),
       onlineTime: _asInt(json['onlineTime']),
       audioUrl: normalizeAudioUrl(json['audioUrl'] as String? ?? ''),
+      playbackMode: (json['playbackMode'] as String?) ?? '',
     );
   }
 
@@ -109,6 +116,7 @@ class Episode {
             (json['audioUrl'] as String?) ??
             '',
       ),
+      playbackMode: (json['playbackMode'] as String?) ?? '',
     );
   }
 }
@@ -222,14 +230,21 @@ HomeSelection selectHomeEpisodes(List<Album> albums, {DateTime? now}) {
   return HomeSelection(heading: '最新更新', episodes: latest.take(12).toList());
 }
 
+typedef CustomAlbumPageLoader = EpisodePage? Function(int albumId, {int page, int pageSize});
+typedef CatalogAugmentor = Catalog Function(Catalog catalog);
+
 class NioApi {
-  NioApi({http.Client? client}) : _client = client ?? http.Client();
+  NioApi({http.Client? client, this.customAlbumPageLoader, this.catalogAugmentor})
+      : _client = client ?? http.Client();
 
   final http.Client _client;
+  final CustomAlbumPageLoader? customAlbumPageLoader;
+  final CatalogAugmentor? catalogAugmentor;
 
   Future<Catalog> fetchCatalog() async {
     final response = await _get(catalogUrl);
-    return Catalog.fromJson(jsonDecode(response) as Map<String, dynamic>);
+    final catalog = Catalog.fromJson(jsonDecode(response) as Map<String, dynamic>);
+    return catalogAugmentor?.call(catalog) ?? catalog;
   }
 
   Future<List<Episode>> fetchAlbumEpisodes(int albumId, {int page = 1, int pageSize = 30}) async {
@@ -237,6 +252,8 @@ class NioApi {
   }
 
   Future<EpisodePage> fetchAlbumPage(int albumId, {int page = 1, int pageSize = 30}) async {
+    final custom = customAlbumPageLoader?.call(albumId, page: page, pageSize: pageSize);
+    if (custom != null) return custom;
     final response = await _client
         .post(
           Uri.parse(albumListUrl),

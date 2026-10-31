@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'api.dart';
+import 'custom_albums.dart';
 import 'player.dart';
 import 'screens.dart';
 import 'theme.dart';
@@ -19,7 +20,13 @@ Future<void> main() async {
   } catch (_) {
     // 后台播放初始化失败时退回前台播放，不让 App 卡在启动页。
   }
-  runApp(NioRadioApp(api: NioApi(), player: RadioPlayer()));
+  runApp(NioRadioApp(
+    api: NioApi(
+      customAlbumPageLoader: getCustomEpisodes,
+      catalogAugmentor: mergeCustomAlbums,
+    ),
+    player: RadioPlayer(),
+  ));
 }
 
 class NioRadioApp extends StatelessWidget {

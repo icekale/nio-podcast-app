@@ -26,7 +26,9 @@ class CoverStore {
   }
 
   static Future<File?> ensure(String url) {
-    if (url.isEmpty) return Future<File?>.value();
+    if (url.isEmpty || url.startsWith('asset:') || url.startsWith('assets/')) {
+      return Future<File?>.value();
+    }
     return _inflight.putIfAbsent(url, () async {
       try {
         final existing = lookup(url);

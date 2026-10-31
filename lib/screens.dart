@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'catalog.dart';
+import 'custom_albums.dart';
 import 'covers.dart';
 import 'format.dart';
 import 'player.dart';
@@ -276,6 +277,10 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
   }
 
   Future<void> _play(Episode episode, [List<Episode>? queue]) {
+    if (isLoopingEpisode(episode) && _sleepLabel == '本集结束') {
+      _sleep?.cancel();
+      setState(() => _sleepLabel = null);
+    }
     return widget.player.playEpisode(episode, queue);
   }
 
@@ -314,6 +319,12 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
 
   void _setSleep(int? minutes, {bool episodeEnd = false}) {
     _sleep?.cancel();
+    // Web disables episode-end sleep for loop-one white-noise tracks.
+    if (episodeEnd && isLoopingEpisode(widget.player.current)) {
+      widget.player.stopAfterEpisode = false;
+      setState(() => _sleepLabel = null);
+      return;
+    }
     widget.player.stopAfterEpisode = episodeEnd;
     if (episodeEnd) {
       setState(() => _sleepLabel = '本集结束');
@@ -1412,7 +1423,8 @@ class _QueueSheetState extends State<QueueSheet> {
                       },
                       itemBuilder: (context) => [
                         for (final minutes in [15, 30, 45, 60]) PopupMenuItem(value: '$minutes', child: Text('$minutes 分钟')),
-                        const PopupMenuItem(value: 'end', child: Text('本集结束')),
+                        if (!isLoopingEpisode(player.current))
+                          const PopupMenuItem(value: 'end', child: Text('本集结束')),
                         if (sleepLabel != null) const PopupMenuItem(value: 'off', child: Text('关闭定时')),
                       ],
                     ),

@@ -1,4 +1,5 @@
 import 'api.dart';
+import 'custom_albums.dart';
 
 const topicCategories = [
   ('news', '资讯热点'),
@@ -12,7 +13,7 @@ const topicCategories = [
 
 const _topicPriority = ['car', 'kids', 'audio', 'news', 'business', 'culture', 'lifestyle'];
 
-const _pinnedAlbumIds = [5, 23];
+final _pinnedAlbumIds = <int>[5, 23, customWhiteNoiseAlbumId];
 const _boostedAlbumIds = [35, 584];
 final _cityChannel = RegExp(r'城市资讯|城市频道|天气预报');
 

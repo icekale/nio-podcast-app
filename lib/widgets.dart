@@ -24,6 +24,13 @@ class _ArtworkState extends State<Artwork> {
   String _url = '';
   File? _file;
 
+  static String? _assetPath(String url) {
+    if (url.startsWith('asset:')) return url.substring('asset:'.length);
+    // Bare assets/ paths from older payloads.
+    if (url.startsWith('assets/')) return url;
+    return null;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -41,8 +48,12 @@ class _ArtworkState extends State<Artwork> {
     final url = palette.dark && widget.darkSrc.isNotEmpty ? widget.darkSrc : widget.src;
     if (url == _url) return;
     _url = url;
+    if (_assetPath(url) != null || url.isEmpty) {
+      _file = null;
+      return;
+    }
     _file = CoverStore.lookup(url);
-    if (_file != null || url.isEmpty) return;
+    if (_file != null) return;
     CoverStore.ensure(url).then((file) {
       if (!mounted || _url != url) return;
       setState(() => _file = file);
@@ -57,23 +68,38 @@ class _ArtworkState extends State<Artwork> {
       height: widget.height ?? double.infinity,
       child: Icon(Icons.music_note_outlined, color: palette.tealDark, size: 22),
     );
+    final asset = _assetPath(_url);
+    final Widget child;
+    if (_url.isEmpty) {
+      child = size;
+    } else if (asset != null) {
+      child = Image.asset(
+        asset,
+        width: widget.width ?? double.infinity,
+        height: widget.height ?? double.infinity,
+        cacheWidth: artworkCacheWidth(context, widget.width),
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => size,
+      );
+    } else if (_file == null) {
+      child = size;
+    } else {
+      child = Image.file(
+        _file!,
+        width: widget.width ?? double.infinity,
+        height: widget.height ?? double.infinity,
+        cacheWidth: artworkCacheWidth(context, widget.width),
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => size,
+      );
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.radius),
       child: ColoredBox(
         color: palette.surfaceSoft,
-        child: _url.isEmpty
-            ? size
-            : _file == null
-                ? size
-                : Image.file(
-                    _file!,
-                    width: widget.width ?? double.infinity,
-                    height: widget.height ?? double.infinity,
-                    cacheWidth: artworkCacheWidth(context, widget.width),
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, _, _) => size,
-                  ),
+        child: child,
       ),
     );
   }
