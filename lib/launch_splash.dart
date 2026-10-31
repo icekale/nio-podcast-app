@@ -102,7 +102,6 @@ class LaunchSplashSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = brightness == Brightness.dark;
     final bg = splashBackgroundFor(brightness);
     final tint = splashLogoTintFor(brightness);
     final Widget mark;
