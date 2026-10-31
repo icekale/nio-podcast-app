@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
@@ -10,14 +12,17 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Paint the branded splash on the first Flutter frame immediately.
-  // JustAudioBackground.init (and AudioPlayer construction) run after that
-  // so OEM/Android-12 handoff is not stuck on a blank NormalTheme window.
-  runApp(const BootApp());
+  // Decode logo before the first frame so BootApp never paints a blank plate.
+  final logo = await loadSplashLogoImage();
+  // Best-effort ImageCache warm for later Image.asset splash uses.
+  await precacheSplashLogoAsset();
+  runApp(BootApp(splashLogo: logo));
 }
 
 class BootApp extends StatefulWidget {
-  const BootApp({super.key});
+  const BootApp({super.key, this.splashLogo});
+
+  final ui.Image? splashLogo;
 
   @override
   State<BootApp> createState() => _BootAppState();
@@ -55,15 +60,32 @@ class _BootAppState extends State<BootApp> {
     setState(() => _ready = true);
   }
 
+  ThemeData _bootTheme(Brightness brightness) {
+    // Keep scaffold on splash colors from frame 0 (matches native).
+    return nioTheme(brightness).copyWith(
+      scaffoldBackgroundColor: splashBackgroundFor(brightness),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'NIO Radio',
-      theme: nioTheme(Brightness.light),
-      darkTheme: nioTheme(Brightness.dark),
+      theme: _bootTheme(Brightness.light),
+      darkTheme: _bootTheme(Brightness.dark),
+      // Avoid a default Material white flash under the route.
+      color: splashBackgroundFor(platformSplashBrightness()),
+      builder: (context, child) {
+        final brightness = Theme.of(context).brightness;
+        return ColoredBox(
+          color: splashBackgroundFor(brightness),
+          child: child ??
+              LaunchSplashRaw(logoImage: widget.splashLogo),
+        );
+      },
       home: _ready
           ? RadioApp(api: _api, player: _player)
-          : const LaunchSplashRaw(),
+          : LaunchSplashRaw(logoImage: widget.splashLogo),
     );
   }
 }
