@@ -11,6 +11,7 @@ import 'covers.dart';
 import 'format.dart';
 import 'player.dart';
 import 'store.dart';
+import 'launch_splash.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -431,19 +432,7 @@ class _RadioAppState extends State<RadioApp> with TickerProviderStateMixin {
   }
 
   Widget _splash(BuildContext context) {
-    final palette = NioPalette(Theme.of(context).brightness);
-    return ColoredBox(
-      color: palette.dark ? const Color(0xFF101A27) : Colors.white,
-      child: Center(
-        child: Image.asset(
-          'assets/logo.png',
-          width: 168,
-          height: 168,
-          color: palette.dark ? Colors.white : Colors.black,
-          colorBlendMode: BlendMode.srcIn,
-        ),
-      ),
-    );
+    return const LaunchSplash();
   }
 
   Widget _body() {
