@@ -120,21 +120,55 @@ class TopBar extends StatelessWidget {
 }
 
 class IconCircleButton extends StatelessWidget {
-  const IconCircleButton({super.key, required this.icon, required this.tooltip, this.onPressed, this.size = 24});
+  const IconCircleButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    this.onPressed,
+    this.size = 24,
+    this.showBadge = false,
+  });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
   final double size;
+  final bool showBadge;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    final button = IconButton(
       onPressed: onPressed,
       tooltip: tooltip,
       iconSize: size,
       visualDensity: VisualDensity.compact,
       icon: Icon(icon),
+    );
+    if (!showBadge) return button;
+    final palette = NioPalette(Theme.of(context).brightness);
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        button,
+        Positioned(
+          top: 8,
+          right: 8,
+          child: IgnorePointer(
+            child: ExcludeSemantics(
+              child: DecoratedBox(
+                key: const Key('favorites-update-dot'),
+                decoration: BoxDecoration(
+                  color: palette.teal,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: palette.surface, spreadRadius: 2)],
+                ),
+                child: const SizedBox(width: 8, height: 8),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -426,9 +460,10 @@ class _SearchFieldState extends State<SearchField> {
 }
 
 class SectionHeading extends StatelessWidget {
-  const SectionHeading({super.key, required this.title, required this.count});
+  const SectionHeading({super.key, required this.title, required this.count, this.titleColor});
   final String title;
   final int count;
+  final Color? titleColor;
 
   @override
   Widget build(BuildContext context) {
@@ -439,7 +474,7 @@ class SectionHeading extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
-          Text(title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w600, height: 1.2)),
+          Text(title, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w600, height: 1.2, color: titleColor)),
           const SizedBox(width: 8),
           Text('$count', style: TextStyle(color: palette.muted, fontSize: 15)),
         ],

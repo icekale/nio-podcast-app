@@ -70,6 +70,17 @@ List<Album> sortAlbumsByLatest(List<Album> albums) {
   return next;
 }
 
+/// 已收藏专辑里，在上次查看收藏页之后有新节目的那些。
+/// 没有水位（首次使用，seenAt <= 0）时返回空，避免一上来就把所有收藏标成「有更新」。
+List<Album> selectUpdatedAlbums(List<Album> albums, [List<int> favoriteIds = const [], int seenAt = 0]) {
+  if (seenAt <= 0) return const [];
+  final favorites = favoriteIds.toSet();
+  return sortAlbumsByLatest([
+    for (final album in albums)
+      if (favorites.contains(album.id) && (album.latestEpisode?.onlineTime ?? 0) > seenAt) album,
+  ]);
+}
+
 List<Album> sortAlbumsForDirectory(List<Album> albums, List<int> favoriteIds) {
   final favoriteOrder = <int, int>{
     for (var i = 0; i < favoriteIds.length; i++) favoriteIds[i]: i,

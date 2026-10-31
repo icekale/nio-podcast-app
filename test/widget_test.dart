@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:nio_radio/api.dart';
 import 'package:nio_radio/main.dart';
 import 'package:nio_radio/player.dart';
+import 'package:nio_radio/theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 http.Client _catalogOnlyClient(int nowMs) {
@@ -101,6 +102,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('NIO Radio'), findsWidgets);
+    expect(find.byTooltip('专辑收藏'), findsOneWidget);
+    expect(find.byIcon(Icons.search), findsNothing);
     expect(find.text('今日推荐'), findsOneWidget);
     expect(find.text('TODAY'), findsOneWidget);
     expect(find.text('全部播放'), findsOneWidget);
@@ -270,6 +273,65 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.favorite), findsOneWidget);
     expect(find.byTooltip('取消收藏 资讯充电站'), findsOneWidget);
+  });
+
+  testWidgets('home opens album favorites instead of search', (tester) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: _catalogOnlyClient(nowMs)), player: RadioPlayer(skipAudio: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('专辑收藏'), findsOneWidget);
+    expect(find.byTooltip('搜索'), findsNothing);
+    expect(find.byIcon(Icons.search), findsNothing);
+
+    await tester.tap(find.byTooltip('专辑收藏'));
+    await tester.pumpAndSettle();
+    expect(find.text('专辑收藏'), findsWidgets);
+    expect(find.text('还没有收藏专辑'), findsOneWidget);
+    expect(find.text('在「全部专辑」里点击专辑标题右侧的 ☆ 即可订阅，之后这里会显示有更新的专辑。'), findsOneWidget);
+
+    await tester.tap(find.text('去全部专辑看看'));
+    await tester.pumpAndSettle();
+    expect(find.text('全部专辑'), findsWidgets);
+    expect(find.byTooltip('搜索'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    expect(find.text('搜索专辑'), findsOneWidget);
+  });
+
+  testWidgets('favorites badge lists albums newer than the seen watermark', (tester) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final seenAt = nowMs - const Duration(hours: 1).inMilliseconds;
+    SharedPreferences.setMockInitialValues({
+      'favorites': <String>['5'],
+      'albums_seen_at': seenAt,
+    });
+    await tester.pumpWidget(NioRadioApp(api: NioApi(client: _catalogOnlyClient(nowMs)), player: RadioPlayer(skipAudio: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('favorites-update-dot')), findsOneWidget);
+    final dot = tester.widget<DecoratedBox>(find.byKey(const Key('favorites-update-dot')));
+    expect((dot.decoration as BoxDecoration).color, NioColors.lightTeal);
+    expect(tester.getSize(find.byKey(const Key('favorites-update-dot'))), const Size(8, 8));
+
+    await tester.tap(find.byTooltip('专辑收藏'));
+    await tester.pumpAndSettle();
+    expect(find.text('有更新'), findsOneWidget);
+    expect(find.text('资讯充电站'), findsWidgets);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('albums_seen_at'), greaterThan(seenAt));
+    expect(find.byKey(const Key('favorites-update-dot')), findsNothing);
+
+    await tester.tap(find.byTooltip('返回主页'));
+    await tester.pumpAndSettle();
+    expect(find.text('今日推荐'), findsOneWidget);
+    expect(find.byKey(const Key('favorites-update-dot')), findsNothing);
+
+    await tester.tap(find.byTooltip('专辑收藏'));
+    await tester.pumpAndSettle();
+    expect(find.text('有更新'), findsNothing);
+    expect(find.text('资讯充电站'), findsWidgets);
   });
 
   testWidgets('hides mini player while splash is showing', (tester) async {
