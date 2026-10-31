@@ -32,6 +32,9 @@ android {
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
             }
+            // Some Chinese OEM installers reject V2-only APKs as「安装包损坏」.
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
 
